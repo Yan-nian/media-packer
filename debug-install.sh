@@ -1,3 +1,4 @@
+set -x
 #!/bin/bash
 #
 # Media Packer - 一键安装脚本
