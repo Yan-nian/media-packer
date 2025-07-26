@@ -353,27 +353,20 @@ class TorrentCreator:
             # 生成种子
             console.print(f"[cyan]正在生成种子文件...[/cyan]")
             
-            # 尝试设置多线程（如果torf支持）
-            if optimal_workers > 1:
-                try:
-                    # 检查torf是否支持多线程
-                    if hasattr(torf, 'set_max_workers'):
-                        torf.set_max_workers(optimal_workers)
-                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
-                    elif hasattr(torrent, 'max_workers'):
-                        torrent.max_workers = optimal_workers
-                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
-                except Exception as e:
-                    console.print(f"[yellow]多线程设置失败，使用默认配置: {e}[/yellow]")
+            # 多线程将在torrent.generate()中通过threads参数设置
+            console.print(f"[green]🚀 将使用 {optimal_workers} 线程进行哈希计算[/green]")
             
-            # 显示进度
+            # 显示进度 - 使用独立控制台避免冲突
             import time
             from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
+            from rich.console import Console
             
-            console.print("")  # 空行，避免与进度条重叠
+            # 创建独立的进度条控制台，避免与主控制台冲突
+            progress_console = Console()
+            console.print("")  # 空行，为进度条预留空间
             start_time = time.time()
             
-            # 使用rich进度条，优化显示
+            # 使用独立控制台的进度条
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -381,45 +374,58 @@ class TorrentCreator:
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
-                console=console,
-                refresh_per_second=2,  # 限制刷新频率，避免闪烁
-                transient=False  # 进度条完成后保留显示
+                console=progress_console,
+                refresh_per_second=2,  # 限制刷新频率
+                transient=False,  # 进度条完成后保留显示
+                disable=False  # 确保进度条启用
             ) as progress:
                 
                 task = progress.add_task(f"[cyan]制种进度 ({optimal_workers} 线程)", total=100)
                 
-                # 添加进度回调函数 - 优化版本
+                # 添加进度回调函数 - 静默版本
                 last_update_time = 0
+                last_percent = 0
                 def progress_callback(torrent, filepath, pieces_done, pieces_total):
-                    nonlocal last_update_time
+                    nonlocal last_update_time, last_percent
                     current_time = time.time()
                     
-                    # 限制刷新频率，避免闪烁（每0.5秒更新一次）
-                    if current_time - last_update_time < 0.5 and pieces_done < pieces_total:
+                    # 限制刷新频率，避免闪烁（每1秒更新一次）
+                    if current_time - last_update_time < 1.0 and pieces_done < pieces_total:
                         return
                     
                     last_update_time = current_time
                     
                     if pieces_total > 0:
                         percent = (pieces_done / pieces_total) * 100
-                        progress.update(task, completed=percent)
                         
-                        if pieces_done > 0:
-                            elapsed = current_time - start_time
-                            speed = (pieces_done / elapsed) if elapsed > 0 else 0
+                        # 只在进度有明显变化时更新
+                        if abs(percent - last_percent) >= 1.0 or pieces_done == pieces_total:
+                            progress.update(task, completed=percent)
+                            last_percent = percent
                             
-                            # 更新描述信息，但不要太频繁
-                            if pieces_done % 10 == 0 or pieces_done == pieces_total:
+                            if pieces_done > 0:
+                                elapsed = current_time - start_time
+                                speed = (pieces_done / elapsed) if elapsed > 0 else 0
                                 progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
                 
-                # 尝试设置进度回调
+                # 使用正确的torf多线程参数
                 try:
-                    torrent.generate(callback=progress_callback, interval=2)  # 降低回调频率
+                    # 使用threads参数启用多线程，interval降低回调频率
+                    torrent.generate(
+                        callback=progress_callback, 
+                        interval=1.0,  # 每秒回调一次
+                        threads=optimal_workers  # 关键：使用threads参数而不是其他方法
+                    )
                 except TypeError:
-                    # 如果不支持callback参数，使用简单方式
-                    progress.update(task, description="[cyan]正在生成种子文件...")
-                    torrent.generate()
-                    progress.update(task, completed=100)
+                    # 降级到无回调的多线程模式
+                    try:
+                        torrent.generate(threads=optimal_workers)
+                        progress.update(task, completed=100)
+                    except TypeError:
+                        # 最后降级到单线程模式
+                        progress.update(task, description="[cyan]正在生成种子文件（单线程模式）...")
+                        torrent.generate()
+                        progress.update(task, completed=100)
             
             end_time = time.time()
             duration = end_time - start_time
