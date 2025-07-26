@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media-packer"
+dynamic = ["version"]
+description = "A torrent creation tool for TV shows and movies based on torf"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "GPL-3.0-or-later"}
+authors = [
+    {name = "Media Packer", email = "mediapacker@example.com"},
+]
+keywords = ["torrent", "media", "tv", "movies", "packing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Communications :: File Sharing",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "torf>=4.0.0",
+    "requests>=2.25.0",
+    "click>=8.0.0",
+    "pydantic>=1.8.0",
+    "tmdbv3api>=1.7.0",
+    "pymediainfo>=5.0.0",
+    "colorama>=0.4.4",
+    "rich>=10.0.0",
+    "pillow>=8.0.0",
+    "watchdog>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.10.0",
+    "black>=21.0.0",
+    "flake8>=3.8.0",
+    "mypy>=0.800",
+]
+
+[project.scripts]
+media-packer = "media_packer.cli:main"
+mp = "media_packer.cli:main"
+media-packer-gui = "media_packer.gui:main"
+mp-gui = "media_packer.gui:main"
+media-packer-interactive = "media_packer.interactive:main"
+mp-i = "media_packer.interactive:main"
+
+[project.urls]
+Homepage = "https://github.com/example/media-packer"
+Repository = "https://github.com/example/media-packer"
+Issues = "https://github.com/example/media-packer/issues"
+
+[tool.setuptools_scm]
+write_to = "media_packer/_version.py"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

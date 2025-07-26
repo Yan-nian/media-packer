@@ -1,0 +1,11 @@
+torf>=4.0.0
+requests>=2.25.0
+click>=8.0.0
+pydantic>=1.8.0
+tmdbv3api>=1.7.0
+pymediainfo>=5.0.0
+colorama>=0.4.4
+rich>=10.0.0
+tkinter
+pillow>=8.0.0
+watchdog>=2.0.0
