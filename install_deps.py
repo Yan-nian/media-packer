@@ -7,6 +7,8 @@ Media Packer 依赖安装脚本
 import sys
 import subprocess
 import argparse
+import os
+from pathlib import Path
 
 def install_package(package, mode='user'):
     """安装单个包，处理现代Python环境限制"""
@@ -20,13 +22,39 @@ def install_package(package, mode='user'):
         [sys.executable, '-m', 'pip', 'install', '--user', '--break-system-packages', package],
         # 方式3: 标准安装（旧系统）
         [sys.executable, '-m', 'pip', 'install', package],
+        # 方式4: 在虚拟环境中安装
+        [sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'],
+        [sys.executable, '-m', 'venv', 'venv'],
+        ['./venv/bin/pip' if os.name != 'nt' else 'venv\\Scripts\\pip.exe', 'install', package],
     ]
     
-    for method in install_methods:
+    # 在当前目录创建虚拟环境
+    venv_path = Path.cwd() / 'venv'
+    
+    for i, method in enumerate(install_methods):
         try:
+            # 特殊处理虚拟环境的创建和使用
+            if i == 3:  # 升级pip
+                subprocess.run(method, capture_output=True, text=True, timeout=300)
+                continue
+            elif i == 4:  # 创建虚拟环境
+                if not venv_path.exists():
+                    subprocess.run(method, capture_output=True, text=True, timeout=300)
+                continue
+            elif i == 5:  # 在虚拟环境中安装
+                venv_pip = str(venv_path / ('Scripts/pip.exe' if os.name == 'nt' else 'bin/pip'))
+                method[0] = venv_pip
+                if not os.path.exists(venv_pip):
+                    continue
+                    
             result = subprocess.run(method, capture_output=True, text=True, timeout=300)
             if result.returncode == 0:
                 print(f"✓ {package} 安装成功")
+                # 如果是在虚拟环境中安装，记录虚拟环境信息
+                if i == 5:
+                    with open('venv_info.txt', 'w') as f:
+                        f.write("使用虚拟环境安装依赖\n")
+                        f.write("运行前请激活虚拟环境: source venv/bin/activate (Linux/Mac) 或 venv\\Scripts\\activate (Windows)\n")
                 return True
             else:
                 # 如果是externally-managed-environment错误，尝试下一个方法
@@ -49,6 +77,37 @@ def check_package(package_name):
         __import__(package_name)
         return True
     except ImportError:
+        # 检查虚拟环境中的包
+        venv_path = Path.cwd() / 'venv'
+        if venv_path.exists():
+            try:
+                # 构建虚拟环境中的Python路径
+                venv_python = str(venv_path / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+                result = subprocess.run([venv_python, '-c', f'import {package_name}'], 
+                                        capture_output=True, text=True)
+                return result.returncode == 0
+            except:
+                pass
+        return False
+
+def check_pip():
+    """检查pip是否可用"""
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', '--version'], 
+                       capture_output=True, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def install_pip():
+    """安装pip"""
+    try:
+        # 尝试使用ensurepip安装pip
+        subprocess.run([sys.executable, '-m', 'ensurepip', '--upgrade'], 
+                       capture_output=True, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        print("✗ 无法自动安装pip，请手动安装pip")
         return False
 
 def main():
@@ -57,14 +116,27 @@ def main():
                        help='安装模式: simple(简化版) 或 full(完整版)')
     parser.add_argument('--force', action='store_true',
                        help='强制重新安装所有依赖')
+    parser.add_argument('--use-venv', action='store_true',
+                       help='强制使用虚拟环境安装')
     
     args = parser.parse_args()
+    
+    print(f"Media Packer 依赖安装 - {args.mode}模式")
+    print("=" * 50)
+    
+    # 检查pip
+    if not check_pip():
+        print("✗ 未找到pip，尝试安装...")
+        if not install_pip():
+            print("✗ pip安装失败，无法继续")
+            return 1
     
     # 定义依赖包
     simple_packages = {
         'torf': 'torf>=4.0.0',
         'click': 'click>=8.0.0', 
-        'rich': 'rich>=13.0.0'
+        'rich': 'rich>=13.0.0',
+        'psutil': 'psutil>=5.8.0'
     }
     
     full_packages = {
@@ -75,9 +147,6 @@ def main():
     }
     
     packages = full_packages if args.mode == 'full' else simple_packages
-    
-    print(f"Media Packer 依赖安装 - {args.mode}模式")
-    print("=" * 50)
     
     # 检查已安装的包
     if not args.force:
@@ -121,10 +190,18 @@ def main():
             print("  python3 media_packer_simple.py")
         else:
             print("  python3 media_packer_all_in_one.py")
+            
+        # 提示虚拟环境信息
+        if os.path.exists('venv_info.txt'):
+            with open('venv_info.txt', 'r') as f:
+                print(f.read())
         return 0
     else:
         print("❌ 部分依赖安装失败")
         print("\n请检查网络连接或手动安装失败的依赖")
+        if os.path.exists('venv_info.txt'):
+            with open('venv_info.txt', 'r') as f:
+                print(f.read())
         return 1
 
 if __name__ == '__main__':

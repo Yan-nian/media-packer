@@ -73,7 +73,7 @@ print_warning() {
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # 显示横幅
@@ -177,6 +177,9 @@ install_pip() {
                 sudo yum install -y python3-pip
             fi
             ;;
+        macos)
+            print_warning "在MacOS上，请使用brew安装Python3，它会自动包含pip"
+            ;;
     esac
 }
 
@@ -271,8 +274,11 @@ create_install_dir() {
 # 下载项目文件
 download_files() {
     print_info "下载Media Packer核心文件..."
+    local FILES=(
+        "media_packer_simple.py"
         "start.py"
         "requirements.txt"
+        "install_deps.py"
     )
     
     # 如果是完整版，额外下载完整版文件
@@ -291,7 +297,7 @@ download_files() {
                 exit 1
             }
         elif command -v wget >/dev/null 2>&1; then
-            wget -q "$BASE_URL/$file" || {
+            wget -q "$BASE_URL/$file" -O "$file" || {
                 print_error "下载 $file 失败"
                 exit 1
             }
@@ -306,6 +312,9 @@ download_files() {
     
     # 创建输出目录
     mkdir -p output
+    
+    # 写入版本文件
+    echo "$SCRIPT_VERSION" > "$VERSION_FILE"
 }
 
 # 安装Python依赖
@@ -317,7 +326,18 @@ install_dependencies() {
     
     print_info "安装Python依赖..."
     
-    # 依赖包列表
+    # 先尝试使用我们自己的Python安装脚本
+    if [ -f "install_deps.py" ]; then
+        print_info "使用内部安装脚本安装依赖..."
+        if python3 install_deps.py --mode "$MODE"; then
+            print_success "依赖安装成功"
+            return
+        else
+            print_warning "内部安装脚本失败，回退到传统方法"
+        fi
+    fi
+    
+    # 传统依赖安装方法
     if [ "$MODE" = "full" ]; then
         DEPS="torf click rich psutil requests tmdbv3api pymediainfo"
         print_info "安装完整版依赖..."
@@ -342,7 +362,7 @@ install_dependencies() {
         print_warning "pip安装失败，尝试系统包管理器..."
         case $DISTRO in
             ubuntu|debian)
-                if sudo apt update && sudo apt install -y python3-torf python3-click python3-rich >/dev/null 2>&1; then
+                if sudo apt update && sudo apt install -y python3-torf python3-click python3-rich python3-psutil >/dev/null 2>&1; then
                     print_success "依赖安装成功（系统包）"
                     install_success=true
                 fi
@@ -380,7 +400,7 @@ create_symlinks() {
     # 创建智能启动脚本
     cat > media-packer << 'EOF'
 #!/bin/bash
-INSTALL_DIR="$(dirname "$(readlink -f "$0")")"
+INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$INSTALL_DIR"
 
 # 检查是否有虚拟环境
@@ -500,6 +520,18 @@ parse_args() {
                 SKIP_DEPS=true
                 shift
                 ;;
+            --update)
+                UPDATE_MODE=true
+                shift
+                ;;
+            --force)
+                FORCE_INSTALL=true
+                shift
+                ;;
+            --no-backup)
+                BACKUP_OLD=false
+                shift
+                ;;
             --help)
                 show_help
                 exit 0
@@ -520,6 +552,8 @@ main() {
     show_banner
     
     detect_system
+    check_existing_installation
+    backup_existing
     create_install_dir
     download_files
     install_dependencies

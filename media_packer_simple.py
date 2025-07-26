@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # 依赖检查和自动安装
 def check_and_install_dependencies():
@@ -314,19 +316,6 @@ class TorrentCreator:
             # 生成种子
             console.print(f"[cyan]正在生成种子文件...[/cyan]")
             
-            # 尝试设置多线程（如果torf支持）
-            if optimal_workers > 1:
-                try:
-                    # 检查torf是否支持多线程
-                    if hasattr(torf, 'set_max_workers'):
-                        torf.set_max_workers(optimal_workers)
-                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
-                    elif hasattr(torrent, 'max_workers'):
-                        torrent.max_workers = optimal_workers
-                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
-                except Exception as e:
-                    console.print(f"[yellow]多线程设置失败，使用默认配置: {e}[/yellow]")
-            
             # 显示进度
             import time
             start_time = time.time()
@@ -465,6 +454,37 @@ class MediaPacker:
         else:
             # 如果没有共同父目录，使用输出目录
             return self.config.output_dir
+
+# ================= 并行处理优化 =================
+
+class ParallelMediaPacker(MediaPacker):
+    """支持并行处理的媒体打包器"""
+    
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.lock = threading.Lock()  # 用于线程安全
+    
+    def process_files_parallel(self, file_paths: List[Path], max_workers: int = 4) -> List[ProcessResult]:
+        """并行处理多个文件"""
+        results = []
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_path = {
+                executor.submit(self.process_file, path): path 
+                for path in file_paths
+            }
+            
+            # 收集结果
+            for future in as_completed(future_to_path):
+                path = future_to_path[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    console.print(f"[red]处理失败 {path}: {e}[/red]")
+        
+        return results
 
 # ================= 交互式界面 =================
 
@@ -1164,11 +1184,11 @@ class InteractiveMediaPacker:
             f"[bold]统计信息[/bold]\n"
             f"文件夹数量: {total_folders}\n"
             f"总剧集数: {total_episodes}\n"
-            f"总大小: {total_size_gb:.1f} GB"
+            f"总大小: {total_size_gb:.1f} GB\n"
         )
         
         if total_missing > 0:
-            stats_text += f"\n[yellow]缺失剧集: {total_missing} 集[/yellow]"
+            stats_text += f"\n[yellow]缺失剧集: {total_missing} 集[/yellow]\n"
         
         stats_panel = Panel(
             stats_text,
@@ -1624,7 +1644,7 @@ class InteractiveMediaPacker:
         )
         
         if success_count > 0:
-            result_text += f"\n[cyan]种子文件保存在: {self.output_directory}[/cyan]"
+            result_text += f"\n[cyan]种子文件保存在: {self.output_directory}[/cyan]\n"
         
         result_panel = Panel(
             result_text,
