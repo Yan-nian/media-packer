@@ -1,7 +1,7 @@
 # Media Packer Dependencies
 
 # 核心依赖 (简化版和完整版都需要)
-torf>=4.0.0
+# torf>=4.0.0  # 已替换为mktorrent命令行工具
 click>=8.0.0
 rich>=13.0.0
 psutil>=5.8.0    # 系统信息和性能监控

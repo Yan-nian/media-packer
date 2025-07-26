@@ -2,7 +2,7 @@
 """
 Media Packer - 简化版种子生成工具
 专注于种子文件创建，不包含元数据获取和NFO生成功能
-版本: 2.1.0
+版本: 3.0.0
 """
 
 import os
@@ -27,7 +27,7 @@ import threading
 def check_and_install_dependencies():
     """检查并自动安装依赖"""
     required_packages = {
-        'torf': 'torf>=4.0.0',
+        # Removed torf dependency - using mktorrent instead
         'click': 'click>=8.0.0', 
         'rich': 'rich>=13.0.0',
         'psutil': 'psutil>=5.8.0'  # 性能监控依赖
@@ -77,11 +77,13 @@ def check_and_install_dependencies():
                 
             except Exception as e:
                 print(f"安装依赖时出错: {e}")
-                print("请手动安装依赖: pip install torf click rich")
+                print("请手动安装依赖: pip install click rich psutil")
+                print("sudo apt install mktorrent  # 或使用对应的包管理器")
                 return False
         else:
             print("请手动安装依赖后再运行:")
-            print("pip install torf click rich")
+            print("pip install click rich psutil")
+            print("sudo apt install mktorrent  # 或使用对应的包管理器")
             return False
     
     return True
@@ -97,7 +99,7 @@ from rich.table import Table
 from rich.progress import track, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt, Confirm
 import click
-import torf
+# Removed torf import - now using mktorrent command-line tool
 
 # 设置控制台
 console = Console()
@@ -306,7 +308,7 @@ class TorrentCreator:
         return total_size
     
     def create_torrent(self, content_path: Path, torrent_path: Path) -> None:
-        """创建种子文件"""
+        """使用mktorrent创建种子文件 - 优化机械硬盘性能"""
         try:
             # 计算总大小用于优化配置
             total_size = self._calculate_total_size(content_path)
@@ -322,7 +324,7 @@ class TorrentCreator:
                 piece_mb = optimal_piece_size / (1024 * 1024) if optimal_piece_size >= 1024*1024 else optimal_piece_size / 1024
                 piece_unit = "MB" if optimal_piece_size >= 1024*1024 else "KB"
                 
-                console.print(f"[green]🚀 智能性能优化[/green]")
+                console.print(f"[green]🚀 智能性能优化 (mktorrent引擎)[/green]")
                 console.print(f"[cyan]  📁 文件大小: {size_mb:.1f} MB[/cyan]")
                 console.print(f"[cyan]  🧩 Piece Size: {piece_mb:.0f} {piece_unit}[/cyan]")
                 console.print(f"[cyan]  🔥 线程数: {optimal_workers}[/cyan]")
@@ -335,117 +337,106 @@ class TorrentCreator:
                 except:
                     pass
             
-            # 创建种子
-            torrent = torf.Torrent(
-                path=str(content_path),
-                trackers=self.config.trackers,
-                private=self.config.private,
-                comment=self.config.comment,
-                created_by=self.config.created_by
-            )
+            console.print(f"[green]🚀 使用mktorrent进行高性能制种[/green]")
+            console.print("")  # 空行分隔
             
-            # 设置piece size
-            if optimal_piece_size > 0:
-                torrent.piece_size = optimal_piece_size
-            elif self.config.piece_size:
-                torrent.piece_size = self.config.piece_size
+            # 使用mktorrent创建种子文件
+            self._create_torrent_with_mktorrent(content_path, torrent_path, optimal_piece_size, optimal_workers)
             
-            # 生成种子
-            console.print(f"[cyan]正在生成种子文件...[/cyan]")
-            
-            # 多线程将在torrent.generate()中通过threads参数设置
-            console.print(f"[green]🚀 将使用 {optimal_workers} 线程进行哈希计算[/green]")
-            
-            # 显示进度 - 使用独立控制台避免冲突
-            import time
-            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
-            from rich.console import Console
-            
-            # 创建独立的进度条控制台，避免与主控制台冲突
-            progress_console = Console()
-            console.print("")  # 空行，为进度条预留空间
-            start_time = time.time()
-            
-            # 使用独立控制台的进度条
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(),
-                console=progress_console,
-                refresh_per_second=2,  # 限制刷新频率
-                transient=False,  # 进度条完成后保留显示
-                disable=False  # 确保进度条启用
-            ) as progress:
-                
-                task = progress.add_task(f"[cyan]制种进度 ({optimal_workers} 线程)", total=100)
-                
-                # 添加进度回调函数 - 静默版本
-                last_update_time = 0
-                last_percent = 0
-                def progress_callback(torrent, filepath, pieces_done, pieces_total):
-                    nonlocal last_update_time, last_percent
-                    current_time = time.time()
-                    
-                    # 限制刷新频率，避免闪烁（每1秒更新一次）
-                    if current_time - last_update_time < 1.0 and pieces_done < pieces_total:
-                        return
-                    
-                    last_update_time = current_time
-                    
-                    if pieces_total > 0:
-                        percent = (pieces_done / pieces_total) * 100
-                        
-                        # 只在进度有明显变化时更新
-                        if abs(percent - last_percent) >= 1.0 or pieces_done == pieces_total:
-                            progress.update(task, completed=percent)
-                            last_percent = percent
-                            
-                            if pieces_done > 0:
-                                elapsed = current_time - start_time
-                                speed = (pieces_done / elapsed) if elapsed > 0 else 0
-                                progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
-                
-                # VPS I/O优化：优先使用无回调模式获得最佳性能
-                try:
-                    # 首先尝试无回调模式（最快，减少I/O干扰）
-                    console.print(f"[green]🚀 使用极速模式（无进度回调）以获得最佳I/O性能[/green]")
-                    torrent.generate(threads=optimal_workers)
-                    progress.update(task, completed=100)
-                except Exception as e:
-                    # 如果无回调模式失败，降级到有回调模式
-                    try:
-                        console.print(f"[yellow]降级到回调模式[/yellow]")
-                        torrent.generate(
-                            callback=progress_callback, 
-                            interval=3.0,  # 更长间隔减少I/O
-                            threads=optimal_workers
-                        )
-                    except Exception as e2:
-                        # 最后降级到单线程模式
-                        progress.update(task, description="[cyan]正在生成种子文件（单线程模式）...")
-                        torrent.generate()
-                        progress.update(task, completed=100)
-            
-            end_time = time.time()
-            duration = end_time - start_time
-            throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
-            
-            # 确保进度条完成后有清晰的分隔
             console.print("")
-            console.print(f"[green]✅ 哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
-            
-            # 保存种子文件
-            torrent_path.parent.mkdir(parents=True, exist_ok=True)
-            torrent.write(str(torrent_path))
-            
-            console.print(f"[green]种子创建成功: {torrent_path}[/green]")
+            console.print(f"[green]✅ 种子创建成功: {torrent_path}[/green]")
             
         except Exception as e:
             console.print(f"[red]创建种子失败: {e}[/red]")
             raise
+    
+    def _create_torrent_with_mktorrent(self, content_path: Path, torrent_path: Path, piece_size: int, threads: int) -> None:
+        """使用mktorrent命令行工具创建种子"""
+        import subprocess
+        import time
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+        
+        # 构建mktorrent命令
+        cmd = ['mktorrent']
+        
+        # 添加线程参数
+        cmd.extend(['-t', str(threads)])
+        
+        # 添加piece size参数（mktorrent使用2的幂次方表示）
+        piece_size_exp = self._calculate_piece_size_exponent(piece_size)
+        cmd.extend(['-l', str(piece_size_exp)])
+        
+        # 添加私有种子标志
+        if self.config.private:
+            cmd.append('-p')
+        
+        # 添加tracker
+        if self.config.trackers:
+            for tracker in self.config.trackers:
+                cmd.extend(['-a', tracker])
+        
+        # 添加注释
+        if self.config.comment:
+            cmd.extend(['-c', self.config.comment])
+        
+        # 添加输出文件
+        cmd.extend(['-o', str(torrent_path)])
+        
+        # 添加输入路径
+        cmd.append(str(content_path))
+        
+        console.print(f"[dim]执行命令: {' '.join(cmd[:8])}...[/dim]")
+        
+        # 显示进度（mktorrent没有进度回调，使用简单的进度指示）
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=False
+        ) as progress:
+            task = progress.add_task(f"[cyan]mktorrent 制种中 ({threads} 线程)", total=None)
+            
+            start_time = time.time()
+            
+            # 执行mktorrent命令
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=3600  # 1小时超时
+                )
+                
+                end_time = time.time()
+                duration = end_time - start_time
+                
+                if result.returncode == 0:
+                    # 计算性能数据
+                    total_size = self._calculate_total_size(content_path)
+                    throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
+                    
+                    progress.update(task, description=f"[green]mktorrent 制种完成[/green]")
+                    console.print(f"[green]✅ 哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
+                else:
+                    progress.update(task, description=f"[red]mktorrent 制种失败[/red]")
+                    raise RuntimeError(f"mktorrent failed: {result.stderr}")
+                    
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("mktorrent timeout (1 hour)")
+            except FileNotFoundError:
+                raise RuntimeError("mktorrent not found. Please install: apt install mktorrent")
+    
+    def _calculate_piece_size_exponent(self, piece_size_bytes: int) -> int:
+        """计算piece size的2的幂次方表示"""
+        import math
+        if piece_size_bytes <= 0:
+            return 18  # 默认256KB (2^18)
+        
+        # 计算最接近的2的幂次方
+        exp = int(math.log2(piece_size_bytes))
+        
+        # 确保在合理范围内 (15-26, 即32KB-64MB)
+        return max(15, min(26, exp))
 
 # ================= 主要功能类 =================
 
@@ -658,10 +649,10 @@ class InteractiveMediaPacker:
             f"[bold blue]Media Packer - 简化版种子生成工具[/bold blue]\n"
             f"[dim]版本: v{__version__}[/dim]\n\n"
             "[green]功能特性:[/green]\n"
-            "• 智能媒体文件识别\n"
-            "• 种子文件生成\n"
-            "• 批量处理支持\n"
-            "• 交互式操作界面\n"
+            "• mktorrent 高性能种子创建\n"
+            "• 机械硬盘 RAID 阵列优化\n"
+            "• 自动 CPU 线程检测\n"
+            "• VPS 环境性能调优\n\n"
             "• [bold cyan]自动性能优化 (默认启用)[/bold cyan]\n\n"
             "[cyan]性能优化特性:[/cyan]\n"
             "• 智能 piece size 选择\n"
@@ -2035,36 +2026,9 @@ def batch(ctx, input_paths, output, name):
 @click.argument('torrent_path', type=click.Path(exists=True))
 def info(torrent_path):
     """显示种子信息"""
-    try:
-        torrent = torf.Torrent.read(torrent_path)
-        
-        info_table = Table(title="种子信息")
-        info_table.add_column("属性", style="cyan")
-        info_table.add_column("值", style="yellow")
-        
-        info_table.add_row("名称", torrent.name or "未知")
-        info_table.add_row("大小", f"{torrent.size / (1024**3):.2f} GB" if torrent.size else "未知")
-        info_table.add_row("文件数", str(len(torrent.files)) if torrent.files else "未知")
-        
-        # 安全地处理 trackers
-        trackers_str = "无"
-        if torrent.trackers:
-            try:
-                trackers_str = "\n".join(str(t) for t in torrent.trackers)
-            except:
-                trackers_str = "无法显示"
-        info_table.add_row("Tracker", trackers_str)
-        
-        info_table.add_row("私有", "是" if torrent.private else "否")
-        info_table.add_row("注释", torrent.comment or "无")
-        info_table.add_row("创建者", torrent.created_by or "未知")
-        info_table.add_row("创建时间", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(torrent.creation_date)) if torrent.creation_date else "未知")
-        info_table.add_row("Piece大小", f"{torrent.piece_size / 1024} KB" if torrent.piece_size else "未知")
-        
-        console.print(info_table)
-        
-    except Exception as e:
-        console.print(f"[red]读取种子文件失败: {e}[/red]")
+    console.print("[red]种子信息功能已暂时禁用[/red]")
+    console.print("[yellow]原因: 已切换到mktorrent引擎，不再依赖torf库[/yellow]")
+    console.print("[cyan]提示: 可以使用其他种子工具查看种子信息[/cyan]")
 
 
 @cli.command()
@@ -2073,55 +2037,9 @@ def info(torrent_path):
 @click.option('--verbose', '-v', is_flag=True, help='显示详细验证信息')
 def verify(torrent_path, content_path, verbose):
     """验证种子文件"""
-    try:
-        torrent = torf.Torrent.read(torrent_path)
-        
-        console.print(f"[cyan]正在验证种子文件: {Path(torrent_path).name}[/cyan]")
-        
-        # 显示基本信息
-        if verbose:
-            console.print(f"[green]种子名称:[/green] {torrent.name}")
-            console.print(f"[green]文件总数:[/green] {len(torrent.files)}")
-            console.print(f"[green]总大小:[/green] {torrent.size / (1024**3):.2f} GB")
-        
-        # 确定要验证的内容路径
-        if content_path:
-            verify_path = Path(content_path)
-        elif torrent.path:
-            verify_path = Path(torrent.path)
-        else:
-            console.print("[red]错误: 无法确定要验证的内容路径[/red]")
-            console.print("[yellow]提示: 请使用 --content-path 参数指定原始内容路径[/yellow]")
-            return
-        
-        if not verify_path.exists():
-            console.print(f"[red]错误: 内容路径不存在: {verify_path}[/red]")
-            return
-        
-        # 验证文件
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
-        ) as progress:
-            task = progress.add_task("验证文件...", total=None)
-            
-            try:
-                # 验证种子文件
-                is_valid = torrent.verify(verify_path)
-                progress.remove_task(task)
-                
-                if is_valid:
-                    console.print("[bold green]✓ 种子文件验证通过[/bold green]")
-                else:
-                    console.print("[bold red]✗ 种子文件验证失败[/bold red]")
-                    
-            except Exception as e:
-                progress.remove_task(task)
-                console.print(f"[bold red]✗ 验证过程中出错: {e}[/bold red]")
-                
-    except Exception as e:
-        console.print(f"[red]读取种子文件失败: {e}[/red]")
+    console.print("[red]种子验证功能已暂时禁用[/red]")
+    console.print("[yellow]原因: 已切换到mktorrent引擎，不再依赖torf库[/yellow]")
+    console.print("[cyan]提示: 可以使用transmission-show或其他BT客户端验证种子[/cyan]")
 
 @cli.command()
 def interactive():
