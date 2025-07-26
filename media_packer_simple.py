@@ -247,9 +247,11 @@ class TorrentCreator:
             load_avg = 0
             cpu_percent = 0
         
-        # 智能线程数计算 - 性能优先策略
-        if physical_cores >= 16:  # 高性能CPU
-            optimal_workers = min(8, physical_cores // 2)
+        # 智能线程数计算 - 性能优先策略（针对高性能服务器优化）
+        if physical_cores >= 32:  # 超高性能CPU（如双路服务器）
+            optimal_workers = min(16, physical_cores // 3)
+        elif physical_cores >= 16:  # 高性能CPU（如至强E5、AMD EPYC）
+            optimal_workers = min(12, physical_cores // 2)
         elif physical_cores >= 8:  # 中高端CPU
             optimal_workers = min(6, physical_cores // 2 + 1)
         elif physical_cores >= 4:  # 主流CPU
@@ -267,10 +269,13 @@ class TorrentCreator:
             # 如果内存小于4GB，限制线程数
             if memory.total < 4 * 1024 * 1024 * 1024:
                 optimal_workers = min(optimal_workers, 4)
+            # 如果内存充足，可以使用更多线程
+            elif memory.total >= 32 * 1024 * 1024 * 1024:  # 32GB+内存
+                optimal_workers = min(optimal_workers + 4, 20)
         except:
             pass
         
-        return min(optimal_workers, 8)  # 最大8线程，避免过度并发
+        return min(optimal_workers, 20)  # 最大20线程，充分利用高性能CPU
     
     def _calculate_total_size(self, content_path: Path) -> int:
         """计算内容总大小"""
@@ -357,22 +362,41 @@ class TorrentCreator:
             
             # 显示进度
             import time
+            from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
+            
             start_time = time.time()
             
-            # 添加进度回调函数
-            def progress_callback(*args):
-                # 简化处理，避免参数不匹配问题
-                if len(args) >= 2:
-                    piece_index, piece_count = args[0], args[1]
-                    if piece_count > 0:
-                        percent = (piece_index / piece_count) * 100
-                        elapsed = time.time() - start_time
-                        if piece_index > 0:
-                            eta = (elapsed / piece_index) * (piece_count - piece_index)
-                            console.print(f"[cyan]进度: {percent:.1f}% ({piece_index}/{piece_count}) "
-                                          f"已用时: {elapsed:.1f}s 预计剩余: {eta:.1f}s[/cyan]", end='\r')
-            
-            torrent.generate()
+            # 使用rich进度条
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=console
+            ) as progress:
+                
+                task = progress.add_task(f"[cyan]制种进度 ({optimal_workers} 线程)", total=100)
+                
+                # 添加进度回调函数
+                def progress_callback(torrent, filepath, pieces_done, pieces_total):
+                    if pieces_total > 0:
+                        percent = (pieces_done / pieces_total) * 100
+                        progress.update(task, completed=percent)
+                        if pieces_done > 0:
+                            elapsed = time.time() - start_time
+                            speed = (pieces_done / elapsed) if elapsed > 0 else 0
+                            progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
+                
+                # 尝试设置进度回调
+                try:
+                    torrent.generate(callback=progress_callback, interval=1)
+                except TypeError:
+                    # 如果不支持callback参数，使用简单方式
+                    progress.update(task, description="[cyan]正在生成种子文件...")
+                    torrent.generate()
+                    progress.update(task, completed=100)
             
             end_time = time.time()
             duration = end_time - start_time
@@ -2126,17 +2150,31 @@ def system_info():
         # 推荐配置
         console.print("\n[bold cyan]推荐配置[/bold cyan]")
         
-        # 推荐线程数
-        if cpu_count_physical >= 16:
-            recommended_workers = min(8, cpu_count_physical // 2)
-        elif cpu_count_physical >= 8:
+        # 推荐线程数（使用与实际制种相同的算法）
+        if cpu_count_physical >= 32:  # 超高性能CPU（如双路服务器）
+            recommended_workers = min(16, cpu_count_physical // 3)
+        elif cpu_count_physical >= 16:  # 高性能CPU（如至强E5、AMD EPYC）
+            recommended_workers = min(12, cpu_count_physical // 2)
+        elif cpu_count_physical >= 8:  # 中高端CPU
             recommended_workers = min(6, cpu_count_physical // 2 + 1)
-        elif cpu_count_physical >= 4:
+        elif cpu_count_physical >= 4:  # 主流CPU
             recommended_workers = cpu_count_physical // 2 + 1
-        else:
+        else:  # 低端CPU
             recommended_workers = max(2, cpu_count_physical)
-            
-        console.print(f"[green]推荐线程数:[/green] {recommended_workers}")
+        
+        # 内存优化调整
+        if memory.total >= 32 * 1024 * 1024 * 1024:  # 32GB+内存
+            recommended_workers = min(recommended_workers + 4, 20)
+        
+        console.print(f"[green]推荐线程数:[/green] {recommended_workers} (针对{cpu_count_physical}核心CPU优化)")
+        
+        # 显示CPU类型判断
+        if cpu_count_physical >= 16:
+            console.print("[green]CPU类型:[/green] 高性能服务器CPU (如至强E5/EPYC)")
+        elif cpu_count_physical >= 8:
+            console.print("[green]CPU类型:[/green] 中高端CPU")
+        else:
+            console.print("[green]CPU类型:[/green] 主流/入门级CPU")
         
         # 推荐Piece Size
         if memory.total >= 16 * 1024 * 1024 * 1024:  # 16GB以上内存
