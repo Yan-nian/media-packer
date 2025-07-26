@@ -2,8 +2,9 @@
 """
 Media Packer - 简化版种子生成工具
 专注于种子文件创建，不包含元数据获取和NFO生成功能
-版本: 3.0.0
+版本: 3.1.0
 """
+
 
 import os
 import sys
