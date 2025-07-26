@@ -210,18 +210,20 @@ class TorrentCreator:
         if not self.config.auto_optimize:
             return self.config.piece_size if self.config.piece_size else 0
         
-        # 更精确的性能优化配置
+        # VPS优化的Piece Size配置 - 更大的piece size提升性能
         if total_size < 50 * 1024 * 1024:  # < 50MB
-            return 128 * 1024  # 128KB - 小文件使用更小piece size
+            return 256 * 1024  # 256KB - 小文件适中配置
         elif total_size < 500 * 1024 * 1024:  # < 500MB
-            return 512 * 1024  # 512KB - 中小文件
-        elif total_size < 2 * 1024 * 1024 * 1024:  # < 2GB
-            return 1024 * 1024  # 1MB - 标准配置
-        elif total_size < 8 * 1024 * 1024 * 1024:  # < 8GB
-            return 2 * 1024 * 1024  # 2MB - 大文件
-        elif total_size < 32 * 1024 * 1024 * 1024:  # < 32GB
-            return 4 * 1024 * 1024  # 4MB - 超大文件
-        else:  # >= 32GB
+            return 1024 * 1024  # 1MB - 中小文件
+        elif total_size < 1 * 1024 * 1024 * 1024:  # < 1GB
+            return 2 * 1024 * 1024  # 2MB - 1GB以下文件
+        elif total_size < 4 * 1024 * 1024 * 1024:  # < 4GB
+            return 4 * 1024 * 1024  # 4MB - VPS环境下4GB文件最优
+        elif total_size < 16 * 1024 * 1024 * 1024:  # < 16GB
+            return 8 * 1024 * 1024  # 8MB - 大文件
+        elif total_size < 64 * 1024 * 1024 * 1024:  # < 64GB
+            return 16 * 1024 * 1024  # 16MB - 超大文件
+        else:  # >= 64GB
             return 8 * 1024 * 1024  # 8MB - 巨大文件
     
     def _get_optimal_workers(self) -> int:
@@ -247,21 +249,25 @@ class TorrentCreator:
             load_avg = 0
             cpu_percent = 0
         
-        # 智能线程数计算 - 性能优先策略（针对高性能服务器优化）
+        # 智能线程数计算 - VPS优化版本
         if physical_cores >= 32:  # 超高性能CPU（如双路服务器）
-            optimal_workers = min(16, physical_cores // 3)
+            optimal_workers = min(20, physical_cores // 2)
         elif physical_cores >= 16:  # 高性能CPU（如至强E5、AMD EPYC）
-            optimal_workers = min(12, physical_cores // 2)
+            optimal_workers = min(16, physical_cores // 2 + 2)
+        elif physical_cores >= 10:  # 10核心VPS优化（如Xeon 5115）
+            optimal_workers = min(12, physical_cores + 2)  # 10核用12线程
         elif physical_cores >= 8:  # 中高端CPU
-            optimal_workers = min(6, physical_cores // 2 + 1)
+            optimal_workers = min(8, physical_cores + 1)
         elif physical_cores >= 4:  # 主流CPU
-            optimal_workers = physical_cores // 2 + 1
+            optimal_workers = physical_cores + 1
         else:  # 低端CPU
-            optimal_workers = max(2, physical_cores)
+            optimal_workers = max(3, physical_cores)
         
-        # 根据系统负载动态调整
-        if cpu_percent > 80 or load_avg > physical_cores * 0.8:
-            optimal_workers = max(1, optimal_workers // 2)
+        # VPS环境特殊优化 - 更激进的线程策略
+        if cpu_percent < 50:  # CPU使用率低，可以使用更多线程
+            optimal_workers = min(optimal_workers + 2, 16)
+        elif cpu_percent > 80 or load_avg > physical_cores * 0.8:
+            optimal_workers = max(2, optimal_workers // 2)
         
         # 添加内存限制检查
         try:
@@ -1676,13 +1682,11 @@ class InteractiveMediaPacker:
                         folder_name = task.get('folder_name', file_path.name)
                         
                         task_progress = progress.add_task(
-                            f"处理文件夹: {folder_name} ({task.get('episode_count', 0)} 集)",
+                            f"[cyan]制种: {folder_name} ({task.get('episode_count', 0)} 集)[/cyan]",
                             total=None
                         )
                         
-                        self.console.print(f"[cyan]处理文件夹: {folder_name}[/cyan]")
-                        
-                        # 直接为文件夹创建种子
+                        # 直接为文件夹创建种子（不重复打印）
                         torrent_path = packer.create_torrent_for_file(
                             file_path,
                             custom_name=folder_name,
@@ -1696,19 +1700,15 @@ class InteractiveMediaPacker:
                         file_name = file_path.name
                         
                         task_progress = progress.add_task(
-                            f"处理文件: {file_name}",
+                            f"[cyan]制种: {file_name}[/cyan]",
                             total=None
                         )
                         
-                        self.console.print(f"[cyan]处理文件: {file_name}[/cyan]")
-                        
-                        # 获取文件夹名称
+                        # 获取文件夹名称（不重复打印）
                         if file_path.is_file():
                             folder_name = file_path.parent.name
                         else:
                             folder_name = file_path.name
-                        
-                        self.console.print(f"[cyan]种子文件名将使用: {folder_name}[/cyan]")
                         
                         # 创建种子
                         torrent_path = packer.create_torrent_for_file(
