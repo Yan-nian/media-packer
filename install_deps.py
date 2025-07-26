@@ -10,6 +10,12 @@ import argparse
 import os
 from pathlib import Path
 
+# 版本信息
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "unknown"
+
 def install_package(package, mode='user'):
     """安装单个包，处理现代Python环境限制"""
     print(f"安装 {package}...")
@@ -111,17 +117,18 @@ def install_pip():
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Media Packer 依赖安装工具')
+    parser = argparse.ArgumentParser(description=f'Media Packer 依赖安装工具 v{__version__}')
     parser.add_argument('--mode', choices=['simple', 'full'], default='simple',
                        help='安装模式: simple(简化版) 或 full(完整版)')
     parser.add_argument('--force', action='store_true',
                        help='强制重新安装所有依赖')
     parser.add_argument('--use-venv', action='store_true',
                        help='强制使用虚拟环境安装')
+    parser.add_argument('--version', action='version', version=f'Media Packer 依赖安装工具 v{__version__}')
     
     args = parser.parse_args()
     
-    print(f"Media Packer 依赖安装 - {args.mode}模式")
+    print(f"Media Packer 依赖安装 - {args.mode}模式 (v{__version__})")
     print("=" * 50)
     
     # 检查pip

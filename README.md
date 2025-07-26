@@ -4,27 +4,7 @@
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-一个专门为PT站用户设计的轻├── 📄 R## 📂 项目结构
-
-```
-media-packer/
-├── 📄 README.md                    # 项目说明文档
-├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
-├── 📄 PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
-├── 📄 UNIVERSAL_INSTALL_GUIDE.md   # 通用安装脚本详细说明
-├── 📄 USAGE_EXAMPLES.md            # 详细使用示例
-├── 🐍 start.py                     # 智能启动器
-├── 🐍 media_packer_simple.py       # 简化版主程序
-├── 🐍 media_packer_all_in_one.py   # 完整版主程序
-├── 🐍 install_deps.py              # 依赖安装工具
-├── 🔧 universal-install.sh         # 通用智能安装脚本（推荐）
-├── 📋 requirements.txt             # Python依赖列表
-├── 📦 pyproject.toml               # 项目配置
-└── 📁 output/                      # 输出目录           # 项目说明文档
-├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
-├── 📄 PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
-├── 📄 UNIVERSAL_INSTALL_GUIDE.md   # 通用安装脚本详细说明
-├── 📄 USAGE_EXAMPLES.md            # 详细使用示例制作工具，特别优化了文件夹命名和自动化流程。
+一个专门为PT站用户设计的轻量级种子制作工具，特别优化了文件夹命名和自动化流程。
 
 ## 🌟 一键使用
 
@@ -32,10 +12,10 @@ media-packer/
 # ⚡ 通用一键安装（强烈推荐）- 自动检测系统，智能安装
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 
-# � 静默安装简化版
+# 🤫 静默安装简化版
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet --simple
 
-# � 安装完整版
+# 📦 安装完整版
 curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --full
 
 # 🎯 自定义安装路径
@@ -52,6 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universa
 - 🖥️ **多平台支持** - Windows、macOS、Linux全平台兼容
 - 🚀 **VPS优化** - 专门为服务器环境优化的部署方案
 - 📦 **零配置启动** - 下载即用，无需手动安装依赖
+- 📊 **版本管理** - 完善的版本控制系统
 
 ## 🚀 快速开始
 
@@ -117,8 +98,6 @@ curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/media_pa
 pip install torf click rich
 python3 media_packer_simple.py
 ```
-
-### 🖥️ VPS 服务器部署
 
 ### 🖥️ VPS 服务器部署
 
@@ -296,9 +275,9 @@ python3 media_packer_simple.py batch /path/to/videos/* --name "Batch_Upload"
 media-packer/
 ├── 📄 README.md                    # 项目说明文档
 ├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
-├── � PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
+├── 📄 PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
 ├── 📄 USAGE_EXAMPLES.md            # 详细使用示例
-├── �🐍 start.py                     # 智能启动器
+├── 🐍 start.py                     # 智能启动器
 ├── 🐍 media_packer_simple.py       # 简化版主程序
 ├── 🐍 media_packer_all_in_one.py   # 完整版主程序
 ├── 🐍 install_deps.py              # 依赖安装工具
@@ -306,24 +285,6 @@ media-packer/
 ├── 📋 requirements.txt             # Python依赖列表
 ├── 📦 pyproject.toml               # 项目配置
 └── 📁 output/                      # 输出目录
-```
-
-## 📊 启动方式对比
-
-| 启动方式 | 用户类型 | 复杂度 | 安装需求 | 推荐指数 |
-|----------|----------|--------|----------|----------|
-| `universal-install.sh` | 所有用户 | ⭐ | 智能安装 | ⭐⭐⭐⭐⭐ |
-| `universal-install.sh --simple` | 轻量用户 | ⭐ | 简化安装 | ⭐⭐⭐⭐⭐ |
-| `universal-install.sh --full` | 高级用户 | ⭐⭐ | 完整安装 | ⭐⭐⭐⭐ |
-| `python3 start.py` | 开发用户 | ⭐⭐ | 需要Git | ⭐⭐⭐ |
-| 直接下载主文件 | 测试用户 | ⭐⭐⭐ | 手动管理 | ⭐⭐ |
-│   ├── 🐍 interactive.py           # 交互界面
-│   ├── 📁 core/                    # 核心功能
-│   ├── 📁 gui/                     # GUI组件
-│   ├── 📁 utils/                   # 工具函数
-│   └── 📁 models/                  # 数据模型
-├── 📁 output/                      # 输出目录
-└── 📁 temp/                        # 临时文件
 ```
 
 ## 🔄 版本差异
@@ -361,7 +322,7 @@ python3 media_packer_simple.py batch /data/videos/* --organize
 crontab -e
 
 # 每小时检查新文件并制种
-0 * * * * /bin/bash -c 'media-packer batch /data/new_videos/* --name "Auto_$(date +\%Y\%m\%d_\%H)" > /var/log/media-packer.log 2>&1'
+0 * * * * /bin/bash -c 'media-packer batch /data/new_videos/* --name "Auto_$(date +%Y%m%d_%H)" > /var/log/media-packer.log 2>&1'
 ```
 
 ### 3. 一次性使用
@@ -468,10 +429,19 @@ python3 media_packer_simple.py batch /data/videos/*.mkv --name "MyBatch"
 python3 media_packer_simple.py batch /data/videos/* --organize
 ```
 
-### 种子信息查看
+### 种子信息查看和验证
 ```bash
 # 查看种子详细信息
 python3 media_packer_simple.py info TORRENT_PATH
+
+# 验证种子文件
+python3 media_packer_simple.py verify TORRENT_PATH
+```
+
+### 系统信息查看
+```bash
+# 查看系统信息和推荐配置
+python3 media_packer_simple.py system_info
 ```
 
 ### 配置管理
@@ -512,10 +482,39 @@ python3 media_packer_simple.py batch FILES... [OPTIONS]
 python3 media_packer_simple.py info TORRENT_PATH
 ```
 
+#### verify - 验证种子文件
+```bash
+python3 media_packer_simple.py verify TORRENT_PATH
+```
+
+#### system_info - 显示系统信息
+```bash
+python3 media_packer_simple.py system_info
+```
+
 #### interactive - 交互模式
 ```bash
 python3 media_packer_simple.py interactive
 ```
+
+## 🔄 版本管理
+
+Media Packer 使用语义化版本控制。当前版本为 v2.1.0。
+
+### 查看版本
+```bash
+# 查看程序版本
+python3 media_packer_simple.py --version
+
+# 查看依赖安装工具版本
+python3 install_deps.py --version
+
+# 查看启动器版本
+python3 start.py --version
+```
+
+### 更新日志
+详细更新日志请查看 [CHANGELOG.md](CHANGELOG.md)
 
 ## 🤝 贡献指南
 
@@ -538,7 +537,16 @@ python3 media_packer_simple.py interactive
 
 ## 📜 更新日志
 
-### v2.0.0 (当前版本)
+### v2.1.0 (当前版本)
+- ✨ 新增版本管理系统
+- ✨ 新增种子文件验证功能
+- ✨ 新增系统信息显示功能
+- ✨ 新增进度条显示功能
+- 🔧 优化制种脚本的性能配置推荐
+- 🔧 增强内存限制检查
+- 🔧 完善一键安装脚本，增强错误处理
+
+### v2.0.0
 - ✨ 新增VPS一键部署脚本
 - ✨ 自动依赖检查和安装
 - ✨ 智能启动器

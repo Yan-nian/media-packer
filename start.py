@@ -10,12 +10,19 @@ import subprocess
 import argparse
 from pathlib import Path
 
+# 版本信息
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "unknown"
+
 def print_banner():
     """显示横幅"""
-    banner = """
+    banner = f"""
 ╭─────────────────────────────────────────────────╮
 │              Media Packer 启动器               │
 │          自动依赖安装和版本选择工具             │
+│              版本: v{__version__}                       │
 ╰─────────────────────────────────────────────────╯
 """
     print(banner)
@@ -113,10 +120,11 @@ def run_script(script_name):
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description='Media Packer 启动器')
+    parser = argparse.ArgumentParser(description=f'Media Packer 启动器 v{__version__}')
     parser.add_argument('--mode', choices=['simple', 'full'], help='直接指定模式，跳过选择')
     parser.add_argument('--install-deps', action='store_true', help='只安装依赖')
     parser.add_argument('--check-deps', action='store_true', help='只检查依赖')
+    parser.add_argument('--version', action='version', version=f'Media Packer 启动器 v{__version__}')
     
     args, unknown_args = parser.parse_known_args()
     

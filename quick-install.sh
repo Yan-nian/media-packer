@@ -35,7 +35,7 @@ VERSION_FILE=".version"
 
 # 帮助信息
 show_help() {
-    echo "Media Packer 一键安装脚本"
+    echo "Media Packer 一键安装脚本 v$SCRIPT_VERSION"
     echo ""
     echo "用法: $0 [选项]"
     echo ""
@@ -83,6 +83,7 @@ show_banner() {
         echo "╭─────────────────────────────────────────────────╮"
         echo "│            Media Packer 一键安装器             │"
         echo "│              VPS/本地环境适配版                 │"
+        echo "│              版本: v$SCRIPT_VERSION                     │"
         echo "╰─────────────────────────────────────────────────╯"
         echo -e "${NC}"
     fi

@@ -2,6 +2,7 @@
 """
 Media Packer - 简化版种子生成工具
 专注于种子文件创建，不包含元数据获取和NFO生成功能
+版本: 2.1.0
 """
 
 import os
@@ -13,6 +14,12 @@ import json
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+
+# 版本信息
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "unknown"
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
@@ -195,6 +202,8 @@ class TorrentCreator:
     
     def __init__(self, config: Config):
         self.config = config
+        # 添加缓存来存储已计算的值
+        self._cache = {}
     
     def _get_optimal_piece_size(self, total_size: int) -> int:
         """根据文件大小获取最优piece size - 性能优化版本"""
@@ -252,10 +261,24 @@ class TorrentCreator:
         if cpu_percent > 80 or load_avg > physical_cores * 0.8:
             optimal_workers = max(1, optimal_workers // 2)
         
+        # 添加内存限制检查
+        try:
+            memory = psutil.virtual_memory()
+            # 如果内存小于4GB，限制线程数
+            if memory.total < 4 * 1024 * 1024 * 1024:
+                optimal_workers = min(optimal_workers, 4)
+        except:
+            pass
+        
         return min(optimal_workers, 8)  # 最大8线程，避免过度并发
     
     def _calculate_total_size(self, content_path: Path) -> int:
         """计算内容总大小"""
+        # 使用缓存避免重复计算
+        cache_key = f"size_{content_path}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+            
         total_size = 0
         if content_path.is_file():
             total_size = content_path.stat().st_size
@@ -266,6 +289,9 @@ class TorrentCreator:
                         total_size += file_path.stat().st_size
                     except (OSError, PermissionError):
                         continue
+                        
+        # 缓存结果
+        self._cache[cache_key] = total_size
         return total_size
     
     def create_torrent(self, content_path: Path, torrent_path: Path) -> None:
@@ -316,9 +342,35 @@ class TorrentCreator:
             # 生成种子
             console.print(f"[cyan]正在生成种子文件...[/cyan]")
             
+            # 尝试设置多线程（如果torf支持）
+            if optimal_workers > 1:
+                try:
+                    # 检查torf是否支持多线程
+                    if hasattr(torf, 'set_max_workers'):
+                        torf.set_max_workers(optimal_workers)
+                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
+                    elif hasattr(torrent, 'max_workers'):
+                        torrent.max_workers = optimal_workers
+                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
+                except Exception as e:
+                    console.print(f"[yellow]多线程设置失败，使用默认配置: {e}[/yellow]")
+            
             # 显示进度
             import time
             start_time = time.time()
+            
+            # 添加进度回调函数
+            def progress_callback(*args):
+                # 简化处理，避免参数不匹配问题
+                if len(args) >= 2:
+                    piece_index, piece_count = args[0], args[1]
+                    if piece_count > 0:
+                        percent = (piece_index / piece_count) * 100
+                        elapsed = time.time() - start_time
+                        if piece_index > 0:
+                            eta = (elapsed / piece_index) * (piece_count - piece_index)
+                            console.print(f"[cyan]进度: {percent:.1f}% ({piece_index}/{piece_count}) "
+                                          f"已用时: {elapsed:.1f}s 预计剩余: {eta:.1f}s[/cyan]", end='\r')
             
             torrent.generate()
             
@@ -326,7 +378,7 @@ class TorrentCreator:
             duration = end_time - start_time
             throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
             
-            console.print(f"[green]哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
+            console.print(f"\n[green]哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
             
             # 保存种子文件
             torrent_path.parent.mkdir(parents=True, exist_ok=True)
@@ -546,7 +598,8 @@ class InteractiveMediaPacker:
     def show_welcome(self):
         """显示欢迎界面"""
         welcome_panel = Panel(
-            "[bold blue]Media Packer - 简化版种子生成工具[/bold blue]\n\n"
+            f"[bold blue]Media Packer - 简化版种子生成工具[/bold blue]\n"
+            f"[dim]版本: v{__version__}[/dim]\n\n"
             "[green]功能特性:[/green]\n"
             "• 智能媒体文件识别\n"
             "• 种子文件生成\n"
@@ -1871,9 +1924,10 @@ class InteractiveMediaPacker:
 
 @click.group()
 @click.option('--config', '-c', type=click.Path(), help='配置文件路径')
+@click.version_option(version=__version__)
 @click.pass_context
 def cli(ctx, config):
-    """Media Packer - 简化版种子生成工具"""
+    """Media Packer - 简化版种子生成工具 v{__version__}"""
     ctx.ensure_object(dict)
     
     # 使用默认配置
@@ -1953,15 +2007,84 @@ def info(torrent_path):
         info_table.add_column("属性", style="cyan")
         info_table.add_column("值", style="yellow")
         
-        info_table.add_row("名称", torrent.name)
-        info_table.add_row("大小", f"{torrent.size / (1024**3):.2f} GB")
-        info_table.add_row("文件数", str(len(torrent.files)))
-        info_table.add_row("Tracker", "\n".join(torrent.trackers))
+        info_table.add_row("名称", torrent.name or "未知")
+        info_table.add_row("大小", f"{torrent.size / (1024**3):.2f} GB" if torrent.size else "未知")
+        info_table.add_row("文件数", str(len(torrent.files)) if torrent.files else "未知")
+        
+        # 安全地处理 trackers
+        trackers_str = "无"
+        if torrent.trackers:
+            try:
+                trackers_str = "\n".join(str(t) for t in torrent.trackers)
+            except:
+                trackers_str = "无法显示"
+        info_table.add_row("Tracker", trackers_str)
+        
         info_table.add_row("私有", "是" if torrent.private else "否")
         info_table.add_row("注释", torrent.comment or "无")
+        info_table.add_row("创建者", torrent.created_by or "未知")
+        info_table.add_row("创建时间", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(torrent.creation_date)) if torrent.creation_date else "未知")
+        info_table.add_row("Piece大小", f"{torrent.piece_size / 1024} KB" if torrent.piece_size else "未知")
         
         console.print(info_table)
         
+    except Exception as e:
+        console.print(f"[red]读取种子文件失败: {e}[/red]")
+
+
+@cli.command()
+@click.argument('torrent_path', type=click.Path(exists=True))
+@click.option('--content-path', '-c', type=click.Path(exists=True), help='原始内容路径（如果与种子中记录的不同）')
+@click.option('--verbose', '-v', is_flag=True, help='显示详细验证信息')
+def verify(torrent_path, content_path, verbose):
+    """验证种子文件"""
+    try:
+        torrent = torf.Torrent.read(torrent_path)
+        
+        console.print(f"[cyan]正在验证种子文件: {Path(torrent_path).name}[/cyan]")
+        
+        # 显示基本信息
+        if verbose:
+            console.print(f"[green]种子名称:[/green] {torrent.name}")
+            console.print(f"[green]文件总数:[/green] {len(torrent.files)}")
+            console.print(f"[green]总大小:[/green] {torrent.size / (1024**3):.2f} GB")
+        
+        # 确定要验证的内容路径
+        if content_path:
+            verify_path = Path(content_path)
+        elif torrent.path:
+            verify_path = Path(torrent.path)
+        else:
+            console.print("[red]错误: 无法确定要验证的内容路径[/red]")
+            console.print("[yellow]提示: 请使用 --content-path 参数指定原始内容路径[/yellow]")
+            return
+        
+        if not verify_path.exists():
+            console.print(f"[red]错误: 内容路径不存在: {verify_path}[/red]")
+            return
+        
+        # 验证文件
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task("验证文件...", total=None)
+            
+            try:
+                # 验证种子文件
+                is_valid = torrent.verify(verify_path)
+                progress.remove_task(task)
+                
+                if is_valid:
+                    console.print("[bold green]✓ 种子文件验证通过[/bold green]")
+                else:
+                    console.print("[bold red]✗ 种子文件验证失败[/bold red]")
+                    
+            except Exception as e:
+                progress.remove_task(task)
+                console.print(f"[bold red]✗ 验证过程中出错: {e}[/bold red]")
+                
     except Exception as e:
         console.print(f"[red]读取种子文件失败: {e}[/red]")
 
@@ -1975,6 +2098,65 @@ def interactive():
         console.print("\n[yellow]程序被用户中断[/yellow]")
     except Exception as e:
         console.print(f"[red]启动交互界面失败: {e}[/red]")
+
+
+@cli.command()
+def system_info():
+    """显示系统信息和推荐配置"""
+    try:
+        import multiprocessing
+        import psutil
+        
+        console.print("[bold cyan]系统信息[/bold cyan]")
+        
+        # CPU信息
+        cpu_count_logical = multiprocessing.cpu_count()
+        try:
+            cpu_count_physical = psutil.cpu_count(logical=False)
+        except:
+            cpu_count_physical = cpu_count_logical
+            
+        console.print(f"[green]CPU核心数:[/green] {cpu_count_physical} 物理核心, {cpu_count_logical} 逻辑核心")
+        
+        # 内存信息
+        memory = psutil.virtual_memory()
+        console.print(f"[green]总内存:[/green] {memory.total / (1024**3):.1f} GB")
+        console.print(f"[green]可用内存:[/green] {memory.available / (1024**3):.1f} GB")
+        
+        # 推荐配置
+        console.print("\n[bold cyan]推荐配置[/bold cyan]")
+        
+        # 推荐线程数
+        if cpu_count_physical >= 16:
+            recommended_workers = min(8, cpu_count_physical // 2)
+        elif cpu_count_physical >= 8:
+            recommended_workers = min(6, cpu_count_physical // 2 + 1)
+        elif cpu_count_physical >= 4:
+            recommended_workers = cpu_count_physical // 2 + 1
+        else:
+            recommended_workers = max(2, cpu_count_physical)
+            
+        console.print(f"[green]推荐线程数:[/green] {recommended_workers}")
+        
+        # 推荐Piece Size
+        if memory.total >= 16 * 1024 * 1024 * 1024:  # 16GB以上内存
+            console.print("[green]推荐Piece Size:[/green] 4MB (适用于大文件)")
+        elif memory.total >= 8 * 1024 * 1024 * 1024:  # 8GB以上内存
+            console.print("[green]推荐Piece Size:[/green] 2MB (适用于中等文件)")
+        else:
+            console.print("[green]推荐Piece Size:[/green] 1MB (适用于小文件)")
+            
+        # 系统负载
+        try:
+            load_avg = psutil.getloadavg()
+            console.print(f"[green]系统负载:[/green] {load_avg[0]:.2f}, {load_avg[1]:.2f}, {load_avg[2]:.2f}")
+        except:
+            console.print("[green]系统负载:[/green] 无法获取")
+            
+    except ImportError:
+        console.print("[red]需要安装 psutil: pip install psutil[/red]")
+    except Exception as e:
+        console.print(f"[red]获取系统信息失败: {e}[/red]")
 
 if __name__ == '__main__':
     import sys
