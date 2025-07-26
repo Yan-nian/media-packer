@@ -773,18 +773,27 @@ class MediaPacker:
             'organized_path': organized_path
         }
     
-    def create_torrent_for_file(self, file_path: Path, **kwargs) -> Path:
+    def create_torrent_for_file(self, file_path: Path, custom_name: Optional[str] = None, **kwargs) -> Path:
         """为文件创建种子"""
         result = self.process_file(file_path, **kwargs)
         organized_path = result['organized_path']
         
         # 确定种子文件名和路径
-        if organized_path.is_file():
-            torrent_name = organized_path.stem
-            content_path = organized_path.parent
+        if custom_name:
+            # 使用自定义名称（通常是文件夹名称）
+            torrent_name = custom_name
+            if organized_path.is_file():
+                content_path = organized_path.parent
+            else:
+                content_path = organized_path
         else:
-            torrent_name = organized_path.name
-            content_path = organized_path
+            # 使用默认逻辑
+            if organized_path.is_file():
+                torrent_name = organized_path.stem
+                content_path = organized_path.parent
+            else:
+                torrent_name = organized_path.name
+                content_path = organized_path
         
         torrent_path = self.config.output_dir / f"{torrent_name}.torrent"
         
@@ -1374,17 +1383,22 @@ class InteractiveMediaPacker:
                     create_nfo=False
                 )
                 
-                # 创建种子
-                organized_path = result['organized_path']
-                if organized_path.is_file():
-                    content_path = organized_path.parent
-                    torrent_name = organized_path.stem
-                else:
-                    content_path = organized_path
-                    torrent_name = organized_path.name
+                # 创建种子 - 使用文件夹名称作为种子名称
+                file_path = Path(task['file_path'])
                 
-                torrent_path = config.output_dir / f"{torrent_name}.torrent"
-                packer.torrent_creator.create_torrent(content_path, torrent_path)
+                # 获取文件夹名称
+                if file_path.is_file():
+                    folder_name = file_path.parent.name
+                else:
+                    folder_name = file_path.name
+                
+                self.console.print(f"[cyan]种子文件名将使用: {folder_name}[/cyan]")
+                
+                # 使用更新后的方法创建种子
+                torrent_path = packer.create_torrent_for_file(
+                    file_path,
+                    custom_name=folder_name
+                )
                 
                 task['status'] = 'completed'
                 task['completed_at'] = time.time()
@@ -1570,8 +1584,9 @@ def cli(ctx, config):
 @click.option('--organize', is_flag=True, help='组织文件结构')
 @click.option('--fetch-metadata', is_flag=True, help='获取元数据')
 @click.option('--create-nfo', is_flag=True, help='创建NFO文件')
+@click.option('--name', '-n', help='种子名称（默认使用文件夹名称）')
 @click.pass_context
-def pack(ctx, input_path, output, organize, fetch_metadata, create_nfo):
+def pack(ctx, input_path, output, organize, fetch_metadata, create_nfo, name):
     """打包文件"""
     packer = ctx.obj['packer']
     
@@ -1580,8 +1595,20 @@ def pack(ctx, input_path, output, organize, fetch_metadata, create_nfo):
         packer.file_organizer.base_path = Path(output)
     
     try:
+        input_file = Path(input_path)
+        
+        # 如果没有指定名称，使用文件夹名称
+        if not name:
+            if input_file.is_file():
+                name = input_file.parent.name
+            else:
+                name = input_file.name
+        
+        console.print(f"[cyan]种子文件名将使用: {name}[/cyan]")
+        
         torrent_path = packer.create_torrent_for_file(
-            Path(input_path),
+            input_file,
+            custom_name=name,
             organize=organize,
             fetch_metadata=fetch_metadata,
             create_nfo=create_nfo
