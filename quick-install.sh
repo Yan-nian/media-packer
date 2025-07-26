@@ -433,11 +433,11 @@ create_symlinks() {
     
     print_info "创建启动命令..."
     
-    # 创建智能启动脚本
-    cat > media-packer << 'EOF'
+    # 创建智能启动脚本 - 使用绝对路径
+    cat > media-packer << EOF
 #!/bin/bash
-INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$INSTALL_DIR"
+INSTALL_DIR="$INSTALL_DIR"
+cd "\$INSTALL_DIR"
 
 # 检查是否有虚拟环境
 if [ -f "venv/bin/activate" ]; then
@@ -445,7 +445,7 @@ if [ -f "venv/bin/activate" ]; then
 fi
 
 # 直接运行简化版，避免交互
-python3 media_packer_simple.py "$@"
+python3 media_packer_simple.py "\$@"
 EOF
     
     chmod +x media-packer
