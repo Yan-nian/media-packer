@@ -141,19 +141,101 @@ download_files() {
     print_success "文件下载完成"
 }
 
-# 安装依赖
-install_dependencies() {
+# 创建虚拟环境并安装依赖
+create_venv_and_install() {
+    print_info "创建虚拟环境..."
+    VENV_PATH="$INSTALL_DIR/venv"
+    
+    # 创建虚拟环境
+    if $PYTHON_CMD -m venv "$VENV_PATH" 2>/dev/null; then
+        print_success "虚拟环境创建成功"
+        
+        # 激活虚拟环境并安装依赖
+        source "$VENV_PATH/bin/activate"
+        pip install torf click rich
+        deactivate
+        
+        # 更新Python命令为虚拟环境版本
+        PYTHON_CMD="$VENV_PATH/bin/python"
+        print_success "依赖在虚拟环境中安装完成"
+    else
+        print_error "无法创建虚拟环境，尝试系统包管理器安装..."
+        install_system_packages
+    fi
+}
+
+# 使用系统包管理器安装
+install_system_packages() {
+    print_info "尝试使用系统包管理器安装..."
+    
+    case $DISTRO in
+        "debian")
+            if sudo apt install -y python3-pip python3-venv 2>/dev/null; then
+                print_info "系统包已安装，重试pip安装..."
+                $PYTHON_CMD -m pip install --user torf click rich
+            else
+                print_error "系统包安装失败"
+                suggest_manual_install
+            fi
+            ;;
+        "redhat")
+            if sudo yum install -y python3-pip python3-venv 2>/dev/null; then
+                print_info "系统包已安装，重试pip安装..."
+                $PYTHON_CMD -m pip install --user torf click rich
+            else
+                print_error "系统包安装失败"
+                suggest_manual_install
+            fi
+            ;;
+        *)
+            suggest_manual_install
+            ;;
+    esac
+}
+
+# 建议手动安装
+suggest_manual_install() {
+    print_warning "自动安装失败，请手动安装依赖："
+    echo
+    echo "方式1: 使用虚拟环境（推荐）"
+    echo "python3 -m venv ~/.media-packer/venv"
+    echo "source ~/.media-packer/venv/bin/activate"
+    echo "pip install torf click rich"
+    echo
+    echo "方式2: 使用 --break-system-packages"
+    echo "python3 -m pip install --user --break-system-packages torf click rich"
+    echo
+    echo "方式3: 使用pipx"
+    echo "sudo apt install pipx"
+    echo "pipx install torf click rich"
+    echo
+    read -p "是否继续安装程序文件？(y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+}
     print_info "安装Python依赖..."
     
-    # 尝试使用内置的依赖安装工具
-    if [ -f "install_deps.py" ]; then
-        $PYTHON_CMD install_deps.py --mode simple
-    else
-        # 直接安装核心依赖
-        $PYTHON_CMD -m pip install --user torf click rich
+    # 检查依赖是否已安装
+    if $PYTHON_CMD -c "import torf, click, rich" 2>/dev/null; then
+        print_success "依赖已安装"
+        return 0
     fi
     
-    print_success "依赖安装完成"
+    print_info "安装缺失的依赖包..."
+    
+    # 尝试多种安装方式
+    if $PYTHON_CMD -m pip install --user torf click rich 2>/dev/null; then
+        print_success "使用 --user 模式安装成功"
+    elif $PYTHON_CMD -m pip install --user --break-system-packages torf click rich 2>/dev/null; then
+        print_success "使用 --break-system-packages 模式安装成功"
+    elif command -v pipx &> /dev/null && pipx install torf click rich 2>/dev/null; then
+        print_success "使用 pipx 安装成功"
+    else
+        print_warning "标准安装方法失败，尝试创建虚拟环境..."
+        create_venv_and_install
+    fi
 }
 
 # 创建启动脚本
@@ -161,16 +243,20 @@ create_launcher() {
     print_info "创建启动脚本..."
     
     # 创建命令行启动脚本
-    cat > media-packer << 'EOF'
+    cat > media-packer << EOF
 #!/bin/bash
 # Media Packer 启动脚本
-SCRIPT_DIR="$HOME/.media-packer"
-cd "$SCRIPT_DIR"
+SCRIPT_DIR="\$HOME/.media-packer"
+cd "\$SCRIPT_DIR"
 
-if command -v python3 &> /dev/null; then
-    python3 media_packer_simple.py "$@"
+# 检查是否有虚拟环境
+if [ -f "\$SCRIPT_DIR/venv/bin/python" ]; then
+    # 使用虚拟环境
+    "\$SCRIPT_DIR/venv/bin/python" media_packer_simple.py "\$@"
+elif command -v python3 &> /dev/null; then
+    python3 media_packer_simple.py "\$@"
 elif command -v python &> /dev/null; then
-    python media_packer_simple.py "$@"
+    python media_packer_simple.py "\$@"
 else
     echo "错误: 未找到Python"
     exit 1

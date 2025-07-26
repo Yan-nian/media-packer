@@ -8,24 +8,40 @@ import sys
 import subprocess
 import argparse
 
-def install_package(package_spec):
-    """安装单个包"""
-    try:
-        print(f"正在安装 {package_spec}...")
-        result = subprocess.run([
-            sys.executable, '-m', 'pip', 'install', package_spec
-        ], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            print(f"✓ {package_spec} 安装成功")
-            return True
-        else:
-            print(f"✗ {package_spec} 安装失败:")
-            print(result.stderr)
-            return False
-    except Exception as e:
-        print(f"✗ 安装 {package_spec} 时出错: {e}")
-        return False
+def install_package(package, mode='user'):
+    """安装单个包，处理现代Python环境限制"""
+    print(f"安装 {package}...")
+    
+    # 尝试多种安装方式
+    install_methods = [
+        # 方式1: 用户安装
+        [sys.executable, '-m', 'pip', 'install', '--user', package],
+        # 方式2: 用户安装 + break-system-packages
+        [sys.executable, '-m', 'pip', 'install', '--user', '--break-system-packages', package],
+        # 方式3: 标准安装（旧系统）
+        [sys.executable, '-m', 'pip', 'install', package],
+    ]
+    
+    for method in install_methods:
+        try:
+            result = subprocess.run(method, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                print(f"✓ {package} 安装成功")
+                return True
+            else:
+                # 如果是externally-managed-environment错误，尝试下一个方法
+                if "externally-managed-environment" in result.stderr:
+                    continue
+                # 其他错误，显示错误信息
+                print(f"✗ {package} 安装失败: {result.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            print(f"✗ {package} 安装超时")
+        except Exception as e:
+            print(f"✗ {package} 安装异常: {str(e)}")
+    
+    # 所有方法都失败了
+    print(f"✗ {package} 所有安装方法都失败")
+    return False
 
 def check_package(package_name):
     """检查包是否已安装"""

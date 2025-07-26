@@ -108,7 +108,7 @@ install_dependencies() {
     
     if [[ "$OS" =~ "Ubuntu" ]] || [[ "$OS" =~ "Debian" ]]; then
         # 检查并安装缺失的包
-        packages=("python3" "python3-pip" "git" "curl" "wget")
+        packages=("python3" "python3-pip" "python3-venv" "git" "curl" "wget")
         missing_packages=()
         
         for package in "${packages[@]}"; do
@@ -140,7 +140,7 @@ install_dependencies() {
         done
     else
         print_error "不支持的操作系统: $OS"
-        print_info "请手动安装: python3, python3-pip, git, curl, wget"
+        print_info "请手动安装: python3, python3-pip, python3-venv, git, curl, wget"
         exit 1
     fi
     

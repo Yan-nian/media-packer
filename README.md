@@ -246,7 +246,9 @@ python3 media_packer_simple.py batch /path/to/videos/* --name "Batch_Upload"
 media-packer/
 ├── 📄 README.md                    # 项目说明文档
 ├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
-├── 🐍 start.py                     # 智能启动器
+├── � PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
+├── 📄 USAGE_EXAMPLES.md            # 详细使用示例
+├── �🐍 start.py                     # 智能启动器
 ├── 🐍 media_packer_simple.py       # 简化版主程序
 ├── 🐍 media_packer_all_in_one.py   # 完整版主程序
 ├── 🐍 install_deps.py              # 依赖安装工具
@@ -341,7 +343,24 @@ curl -X POST http://vps-ip:8080/api/create_torrent \
 
 ### 常见问题
 
-#### 1. Python版本问题
+#### 1. 现代Python环境限制问题
+```bash
+# 错误: externally-managed-environment
+# 这是Ubuntu 23.04+/Debian 12+的新限制
+
+# 解决方案1: 使用我们的一键脚本（自动处理）
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+
+# 解决方案2: 手动创建虚拟环境
+python3 -m venv ~/.media-packer-env
+source ~/.media-packer-env/bin/activate
+pip install torf click rich
+
+# 解决方案3: 使用break-system-packages（谨慎）
+python3 -m pip install --user --break-system-packages torf click rich
+```
+
+#### 2. Python版本问题
 ```bash
 # 检查Python版本
 python3 --version
@@ -351,7 +370,7 @@ sudo apt install python3.9 python3.9-pip -y
 python3.9 media_packer_simple.py
 ```
 
-#### 2. 内存不足
+#### 3. 内存不足
 ```bash
 # 检查内存使用
 free -h
@@ -363,13 +382,13 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 ```
 
-#### 3. 网络连接问题
+#### 4. 网络连接问题
 ```bash
 # 使用国内镜像源
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple torf click rich
 ```
 
-#### 4. 磁盘空间不足
+#### 5. 磁盘空间不足
 ```bash
 # 检查磁盘使用
 df -h
@@ -503,9 +522,10 @@ python3 media_packer_simple.py interactive
 ## 📞 支持和反馈
 
 如果遇到问题或有建议，请：
-1. 查看 [VPS_DEPLOYMENT_GUIDE.md](VPS_DEPLOYMENT_GUIDE.md)
-2. 提交 [Issue](https://github.com/Yan-nian/media-packer/issues)
-3. 发起 [Discussion](https://github.com/Yan-nian/media-packer/discussions)
+1. 查看 [VPS_DEPLOYMENT_GUIDE.md](VPS_DEPLOYMENT_GUIDE.md) - VPS部署完整指南
+2. 查看 [PYTHON_ENV_GUIDE.md](PYTHON_ENV_GUIDE.md) - Python环境问题解决
+3. 提交 [Issue](https://github.com/Yan-nian/media-packer/issues)
+4. 发起 [Discussion](https://github.com/Yan-nian/media-packer/discussions)
 
 ---
 

@@ -56,8 +56,29 @@ install_deps() {
     fi
     
     print_info "安装缺失的依赖包..."
-    $PYTHON_CMD -m pip install --user torf click rich
-    print_success "依赖安装完成"
+    
+    # 尝试多种安装方式
+    if $PYTHON_CMD -m pip install --user torf click rich 2>/dev/null; then
+        print_success "使用 --user 模式安装成功"
+    elif $PYTHON_CMD -m pip install --user --break-system-packages torf click rich 2>/dev/null; then
+        print_success "使用 --break-system-packages 模式安装成功"
+    else
+        print_error "依赖安装失败"
+        echo
+        echo "请尝试以下方法之一："
+        echo "1. 使用虚拟环境："
+        echo "   python3 -m venv /tmp/media-packer-env"
+        echo "   source /tmp/media-packer-env/bin/activate"
+        echo "   pip install torf click rich"
+        echo
+        echo "2. 使用 --break-system-packages："
+        echo "   python3 -m pip install --user --break-system-packages torf click rich"
+        echo
+        echo "3. 使用系统包管理器："
+        echo "   sudo apt install python3-pip python3-venv"
+        echo
+        exit 1
+    fi
 }
 
 # 下载并运行
