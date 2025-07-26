@@ -127,6 +127,7 @@ class Config:
     # 性能优化配置
     auto_optimize: bool = True  # 自动优化性能配置
     max_workers: Optional[int] = None  # 最大工作线程数
+    performance_mode: str = "balanced"  # balanced, aggressive, conservative
     
     # 路径配置
     output_dir: Path = Path("./output")
@@ -208,23 +209,27 @@ class TorrentCreator:
         self._cache = {}
     
     def _get_optimal_piece_size(self, total_size: int) -> int:
-        """根据文件大小获取最优piece size - 性能优化版本"""
+        """根据文件大小获取最优piece size - 机械硬盘RAID优化版本"""
         if not self.config.auto_optimize:
             return self.config.piece_size if self.config.piece_size else 0
         
-        # VPS I/O优化的Piece Size配置 - 优先减少I/O次数
+        # 机械硬盘RAID优化的Piece Size配置 - 平衡I/O效率和内存使用
+        size_gb = total_size / (1024 * 1024 * 1024)
+        
         if total_size < 200 * 1024 * 1024:  # < 200MB
             return 1024 * 1024  # 1MB - 小文件
-        elif total_size < 2 * 1024 * 1024 * 1024:  # < 2GB
-            return 8 * 1024 * 1024  # 8MB - 2GB以下直接用8MB
-        elif total_size < 10 * 1024 * 1024 * 1024:  # < 10GB
-            return 16 * 1024 * 1024  # 16MB - VPS环境10GB以下最优
+        elif total_size < 1 * 1024 * 1024 * 1024:  # < 1GB
+            return 2 * 1024 * 1024  # 2MB - 中小文件，减少piece数量
+        elif total_size < 4 * 1024 * 1024 * 1024:  # < 4GB
+            return 4 * 1024 * 1024  # 4MB - 4GB以下最优，平衡性能
+        elif total_size < 8 * 1024 * 1024 * 1024:  # < 8GB  
+            return 8 * 1024 * 1024  # 8MB - 中等文件
+        elif total_size < 20 * 1024 * 1024 * 1024:  # < 20GB
+            return 16 * 1024 * 1024  # 16MB - 大文件
         elif total_size < 50 * 1024 * 1024 * 1024:  # < 50GB  
-            return 32 * 1024 * 1024  # 32MB - 大文件，减少I/O
-        elif total_size < 200 * 1024 * 1024 * 1024:  # < 200GB
-            return 64 * 1024 * 1024  # 64MB - 超大文件I/O优化
-        else:  # >= 200GB
-            return 8 * 1024 * 1024  # 8MB - 巨大文件
+            return 32 * 1024 * 1024  # 32MB - 超大文件
+        else:  # >= 50GB
+            return 16 * 1024 * 1024  # 16MB - 巨大文件回到中等piece size
     
     def _get_optimal_workers(self) -> int:
         """获取最优工作线程数 - 自动检测CPU核心数并优化"""
@@ -249,27 +254,25 @@ class TorrentCreator:
             load_avg = 0
             cpu_percent = 0
         
-        # VPS极致优化线程算法 - 最大化利用CPU
+        # 机械硬盘RAID优化线程算法 - 重点优化I/O而非CPU密集
         if physical_cores >= 32:  # 超高性能CPU（如双路服务器）
-            optimal_workers = min(24, physical_cores)
+            optimal_workers = min(16, physical_cores // 2)  # 减少线程竞争
         elif physical_cores >= 16:  # 高性能CPU（如至强E5、AMD EPYC）
-            optimal_workers = min(20, physical_cores + 4)
-        elif physical_cores >= 10:  # 10核心VPS极致优化（如Xeon 5115）
-            optimal_workers = min(20, physical_cores * 2)  # 10核用20线程！
+            optimal_workers = min(12, physical_cores // 2 + 4)
+        elif physical_cores >= 10:  # 10核心VPS优化（如Xeon 5115）
+            optimal_workers = min(12, physical_cores + 2)  # 从20减到12线程
         elif physical_cores >= 8:  # 中高端CPU
-            optimal_workers = min(12, physical_cores + 4)
+            optimal_workers = min(10, physical_cores + 2)
         elif physical_cores >= 4:  # 主流CPU
-            optimal_workers = physical_cores + 2
+            optimal_workers = physical_cores + 1
         else:  # 低端CPU
-            optimal_workers = max(4, physical_cores)
+            optimal_workers = max(2, physical_cores)
         
-        # VPS环境超激进策略 - CPU使用率低时进一步增加线程
-        if cpu_percent < 30:  # CPU空闲时大胆使用更多线程
-            optimal_workers = min(optimal_workers + 4, 24)
-        elif cpu_percent < 50:  # CPU使用率较低
-            optimal_workers = min(optimal_workers + 2, 20)
-        elif cpu_percent > 80 or load_avg > physical_cores * 0.8:
-            optimal_workers = max(4, optimal_workers // 2)
+        # 保守的负载调整策略 - 机械硬盘I/O为瓶颈
+        if cpu_percent < 20:  # CPU很空闲时适当增加
+            optimal_workers = min(optimal_workers + 2, 16)
+        elif cpu_percent > 70 or load_avg > physical_cores * 0.7:
+            optimal_workers = max(2, optimal_workers // 2)
         
         # 添加内存限制检查
         try:
@@ -277,7 +280,15 @@ class TorrentCreator:
             # 如果内存小于4GB，限制线程数
             if memory.total < 4 * 1024 * 1024 * 1024:
                 optimal_workers = min(optimal_workers, 4)
-            # 如果内存充足，可以使用更多线程
+            # 添加mktorrent特定参数优化
+            if hasattr(self.config, 'performance_mode') and self.config.performance_mode == 'aggressive':
+                # 激进模式：更多线程，适用于高性能CPU + SSD
+                optimal_workers = min(optimal_workers + 4, 20)
+            elif hasattr(self.config, 'performance_mode') and self.config.performance_mode == 'conservative':
+                # 保守模式：减少线程，适用于机械硬盘
+                optimal_workers = max(2, optimal_workers // 2)
+            
+            # 内存充足时可以使用更多线程
             elif memory.total >= 32 * 1024 * 1024 * 1024:  # 32GB+内存
                 optimal_workers = min(optimal_workers + 4, 20)
         except:
@@ -314,6 +325,17 @@ class TorrentCreator:
             total_size = self._calculate_total_size(content_path)
             console.print(f"[cyan]内容总大小: {total_size / (1024**3):.2f} GB[/cyan]")
             
+            # 检查是否适合内存制种（适用于70GB以下文件）
+            if total_size <= 70 * 1024 * 1024 * 1024:  # 70GB及以下文件
+                if Confirm.ask("[yellow]检测到适合内存制种的文件，是否使用内存制种以提升性能？[/yellow]", default=False):
+                    try:
+                        self._create_torrent_in_memory(content_path, torrent_path, total_size)
+                        console.print("")
+                        console.print(f"[green]✅ 种子创建成功 (内存制种): {torrent_path}[/green]")
+                        return
+                    except Exception as e:
+                        console.print(f"[red]内存制种失败，回退到磁盘制种: {e}[/red]")
+            
             # 获取最优配置
             optimal_piece_size = self._get_optimal_piece_size(total_size)
             optimal_workers = self._get_optimal_workers()
@@ -338,6 +360,34 @@ class TorrentCreator:
                     pass
             
             console.print(f"[green]🚀 使用mktorrent进行高性能制种[/green]")
+            
+            # 如果检测到可能是机械硬盘环境，进一步优化
+            import os
+            import platform
+            
+            # 尝试检测存储类型（这是启发式检测）
+            is_mechanical_likely = False
+            if platform.system() == "Linux":
+                try:
+                    # 检查是否在VPS环境（通常使用机械硬盘RAID）
+                    with open('/proc/cpuinfo', 'r') as f:
+                        cpu_info = f.read()
+                        if 'hypervisor' in cpu_info or 'Xeon' in cpu_info:
+                            is_mechanical_likely = True
+                except:
+                    pass
+            
+            if is_mechanical_likely:
+                console.print(f"[yellow]🔧 检测到VPS环境，启用机械硬盘优化模式[/yellow]")
+                # 对于机械硬盘，进一步减少并发和增大piece size
+                if optimal_piece_size < 8 * 1024 * 1024 and total_size > 2 * 1024 * 1024 * 1024:
+                    optimal_piece_size = 8 * 1024 * 1024  # 强制至少8MB
+                    console.print(f"[yellow]  📐 调整Piece Size至8MB（机械硬盘优化）[/yellow]")
+                
+                if optimal_workers > 8:
+                    optimal_workers = 8  # 机械硬盘限制并发
+                    console.print(f"[yellow]  🔥 限制线程数至8（减少磁盘竞争）[/yellow]")
+                    
             console.print("")  # 空行分隔
             
             # 使用mktorrent创建种子文件
@@ -350,6 +400,52 @@ class TorrentCreator:
             console.print(f"[red]创建种子失败: {e}[/red]")
             raise
     
+    def _create_torrent_in_memory(self, content_path: Path, torrent_path: Path, total_size: int) -> None:
+        """在内存中创建种子文件（改进版本）"""
+        console.print("[cyan]🧠 开始内存制种...[/cyan]")
+        
+        import tempfile
+        import shutil
+        import psutil
+        import math
+        
+        # 检查系统是否有足够内存
+        memory = psutil.virtual_memory()
+        available_memory = memory.available
+        
+        if total_size > available_memory * 0.8:  # 确保使用不超过80%的可用内存
+            raise RuntimeError(f"内存不足: 可用内存 {available_memory / (1024**3):.1f} GB, "
+                             f"所需内存 {total_size / (1024**3):.1f} GB")
+        
+        start_time = time.time()
+        
+        # 创建临时目录用于内存制种
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # 复制文件到临时目录（模拟内存操作）
+            if content_path.is_file():
+                temp_content_path = temp_path / content_path.name
+                shutil.copy2(content_path, temp_content_path)
+            else:
+                temp_content_path = temp_path / content_path.name
+                shutil.copytree(content_path, temp_content_path)
+            
+            # 计算piece大小
+            piece_size = self._get_optimal_piece_size(total_size)
+            
+            console.print(f"[cyan]  📦 文件已加载到内存空间[/cyan]")
+            console.print(f"[cyan]  💾 使用内存: {total_size / (1024**3):.1f} GB[/cyan]")
+            console.print(f"[cyan]  🧩 Piece Size: {piece_size / (1024*1024):.1f} MB[/cyan]")
+            
+            # 使用mktorrent处理临时文件
+            self._create_torrent_with_mktorrent(temp_content_path, torrent_path, piece_size, 1)
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            console.print(f"[green]✅ 内存制种完成 - 用时: {duration:.1f}s[/green]")
+    
     def _create_torrent_with_mktorrent(self, content_path: Path, torrent_path: Path, piece_size: int, threads: int) -> None:
         """使用mktorrent命令行工具创建种子"""
         import subprocess
@@ -358,6 +454,9 @@ class TorrentCreator:
         
         # 构建mktorrent命令
         cmd = ['mktorrent']
+        
+        # 添加verbose模式用于性能调试
+        cmd.append('-v')
         
         # 添加线程参数
         cmd.extend(['-t', str(threads)])
@@ -400,26 +499,49 @@ class TorrentCreator:
             
             # 执行mktorrent命令
             try:
-                result = subprocess.run(
+                # 使用实时输出模式获取verbose信息
+                process = subprocess.Popen(
                     cmd,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=3600  # 1小时超时
+                    bufsize=1,
+                    universal_newlines=True
                 )
                 
+                progress.update(task, description=f"[cyan]mktorrent 启动中[/cyan]")
+                
+                # 实时读取输出
+                output_lines = []
+                while True:
+                    output = process.stdout.readline()
+                    if output == '' and process.poll() is not None:
+                        break
+                    if output:
+                        output_lines.append(output.strip())
+                        # 更新进度显示，显示最新的mktorrent信息
+                        if "pieces" in output.lower() or "hash" in output.lower():
+                            progress.update(task, description=f"[cyan]mktorrent: {output.strip()[:50]}...[/cyan]")
+                
+                return_code = process.poll()
                 end_time = time.time()
                 duration = end_time - start_time
                 
-                if result.returncode == 0:
+                if return_code == 0:
                     # 计算性能数据
                     total_size = self._calculate_total_size(content_path)
                     throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
                     
                     progress.update(task, description=f"[green]mktorrent 制种完成[/green]")
                     console.print(f"[green]✅ 哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
+                    
+                    # 如果有详细输出，显示最后几行用于调试
+                    if output_lines and len(output_lines) > 1:
+                        console.print(f"[dim]mktorrent详细信息: {output_lines[-1]}[/dim]")
                 else:
                     progress.update(task, description=f"[red]mktorrent 制种失败[/red]")
-                    raise RuntimeError(f"mktorrent failed: {result.stderr}")
+                    error_output = '\n'.join(output_lines) if output_lines else "未知错误"
+                    raise RuntimeError(f"mktorrent failed (code {return_code}): {error_output}")
                     
             except subprocess.TimeoutExpired:
                 raise RuntimeError("mktorrent timeout (1 hour)")
