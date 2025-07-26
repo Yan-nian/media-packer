@@ -364,9 +364,10 @@ class TorrentCreator:
             import time
             from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
             
+            console.print("")  # 空行，避免与进度条重叠
             start_time = time.time()
             
-            # 使用rich进度条
+            # 使用rich进度条，优化显示
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -374,24 +375,40 @@ class TorrentCreator:
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
-                console=console
+                console=console,
+                refresh_per_second=2,  # 限制刷新频率，避免闪烁
+                transient=False  # 进度条完成后保留显示
             ) as progress:
                 
                 task = progress.add_task(f"[cyan]制种进度 ({optimal_workers} 线程)", total=100)
                 
-                # 添加进度回调函数
+                # 添加进度回调函数 - 优化版本
+                last_update_time = 0
                 def progress_callback(torrent, filepath, pieces_done, pieces_total):
+                    nonlocal last_update_time
+                    current_time = time.time()
+                    
+                    # 限制刷新频率，避免闪烁（每0.5秒更新一次）
+                    if current_time - last_update_time < 0.5 and pieces_done < pieces_total:
+                        return
+                    
+                    last_update_time = current_time
+                    
                     if pieces_total > 0:
                         percent = (pieces_done / pieces_total) * 100
                         progress.update(task, completed=percent)
+                        
                         if pieces_done > 0:
-                            elapsed = time.time() - start_time
+                            elapsed = current_time - start_time
                             speed = (pieces_done / elapsed) if elapsed > 0 else 0
-                            progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
+                            
+                            # 更新描述信息，但不要太频繁
+                            if pieces_done % 10 == 0 or pieces_done == pieces_total:
+                                progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
                 
                 # 尝试设置进度回调
                 try:
-                    torrent.generate(callback=progress_callback, interval=1)
+                    torrent.generate(callback=progress_callback, interval=2)  # 降低回调频率
                 except TypeError:
                     # 如果不支持callback参数，使用简单方式
                     progress.update(task, description="[cyan]正在生成种子文件...")
@@ -402,7 +419,9 @@ class TorrentCreator:
             duration = end_time - start_time
             throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
             
-            console.print(f"\n[green]哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
+            # 确保进度条完成后有清晰的分隔
+            console.print("")
+            console.print(f"[green]✅ 哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
             
             # 保存种子文件
             torrent_path.parent.mkdir(parents=True, exist_ok=True)
