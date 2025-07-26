@@ -1667,76 +1667,60 @@ class InteractiveMediaPacker:
         
         packer = MediaPacker(config)
         
-        # 处理任务
+        # 处理任务 - 使用简化的进度显示避免重叠
         success_count = 0
         error_count = 0
         
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=self.console
-        ) as progress:
-            
-            for task in pending_tasks:
-                try:
-                    task['status'] = 'processing'
+        for i, task in enumerate(pending_tasks, 1):
+            try:
+                task['status'] = 'processing'
+                
+                file_path = Path(task['file_path'])
+                
+                if task.get('is_folder', False):
+                    # 处理文件夹任务
+                    folder_name = task.get('folder_name', file_path.name)
                     
-                    file_path = Path(task['file_path'])
+                    self.console.print(f"\n[cyan]📁 开始制种 ({i}/{len(pending_tasks)}): {folder_name} ({task.get('episode_count', 0)} 集)[/cyan]")
                     
-                    if task.get('is_folder', False):
-                        # 处理文件夹任务
-                        folder_name = task.get('folder_name', file_path.name)
-                        
-                        task_progress = progress.add_task(
-                            f"[cyan]制种: {folder_name} ({task.get('episode_count', 0)} 集)[/cyan]",
-                            total=None
-                        )
-                        
-                        # 直接为文件夹创建种子（不重复打印）
-                        torrent_path = packer.create_torrent_for_file(
-                            file_path,
-                            custom_name=folder_name,
-                            organize=False  # 文件夹已经是组织好的
-                        )
-                        
-                        progress.remove_task(task_progress)
-                        
+                    # 直接为文件夹创建种子（不重复打印）
+                    torrent_path = packer.create_torrent_for_file(
+                        file_path,
+                        custom_name=folder_name,
+                        organize=False  # 文件夹已经是组织好的
+                    )
+                    
+                else:
+                    # 处理单文件任务
+                    file_name = file_path.name
+                    
+                    self.console.print(f"\n[cyan]📄 开始制种 ({i}/{len(pending_tasks)}): {file_name}[/cyan]")
+                    
+                    # 获取文件夹名称（不重复打印）
+                    if file_path.is_file():
+                        folder_name = file_path.parent.name
                     else:
-                        # 处理单文件任务
-                        file_name = file_path.name
-                        
-                        task_progress = progress.add_task(
-                            f"[cyan]制种: {file_name}[/cyan]",
-                            total=None
-                        )
-                        
-                        # 获取文件夹名称（不重复打印）
-                        if file_path.is_file():
-                            folder_name = file_path.parent.name
-                        else:
-                            folder_name = file_path.name
-                        
-                        # 创建种子
-                        torrent_path = packer.create_torrent_for_file(
-                            file_path,
-                            custom_name=folder_name,
-                            organize=True
-                        )
-                        
-                        progress.remove_task(task_progress)
+                        folder_name = file_path.name
                     
-                    task['status'] = 'completed'
-                    task['completed_at'] = time.time()
-                    task['torrent_path'] = str(torrent_path)
-                    success_count += 1
-                    
-                    self.console.print(f"[green]✓ 完成: {torrent_path.name}[/green]")
-                    
-                except Exception as e:
-                    task['status'] = 'error'
-                    task['error_message'] = str(e)
-                    error_count += 1
-                    self.console.print(f"[red]✗ 错误: {e}[/red]")
+                    # 创建种子
+                    torrent_path = packer.create_torrent_for_file(
+                        file_path,
+                        custom_name=folder_name,
+                        organize=True
+                    )
+                
+                task['status'] = 'completed'
+                task['completed_at'] = time.time()
+                task['torrent_path'] = str(torrent_path)
+                success_count += 1
+                
+                self.console.print(f"[green]✅ 完成: {torrent_path.name}[/green]")
+                
+            except Exception as e:
+                task['status'] = 'error'
+                task['error_message'] = str(e)
+                error_count += 1
+                self.console.print(f"[red]❌ 错误: {e}[/red]")
         
         # 显示处理结果
         result_text = (

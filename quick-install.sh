@@ -30,7 +30,7 @@ BACKUP_OLD=true
 FORCE_INSTALL=false
 
 # 版本信息
-SCRIPT_VERSION="2.2.0"
+SCRIPT_VERSION="2.2.1"
 VERSION_FILE=".version"
 
 # 帮助信息
