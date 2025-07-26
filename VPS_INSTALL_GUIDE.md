@@ -113,7 +113,9 @@ python3 media_packer_simple.py pack /path/to/video.mkv
 - Ubuntu/Debian (18.04+)
 - CentOS/RHEL (7+)
 - Fedora (30+)
+- Unraid OS
 - macOS (10.14+)
+- 其他Linux发行版（自动检测包管理器）
 
 ### 依赖安装策略
 1. 优先使用用户模式 pip 安装

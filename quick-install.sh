@@ -30,7 +30,7 @@ BACKUP_OLD=true
 FORCE_INSTALL=false
 
 # 版本信息
-SCRIPT_VERSION="2.2.1"
+SCRIPT_VERSION="2.3.0"
 VERSION_FILE=".version"
 
 # 帮助信息
@@ -104,13 +104,23 @@ detect_system() {
             . /etc/os-release
             DISTRO=$ID
             VERSION=$VERSION_ID
+        else
+            # 特殊处理某些系统
+            if [ -f /etc/unraid-version ]; then
+                DISTRO="unraid-os"
+            elif [ -f /etc/slackware-version ]; then
+                DISTRO="slackware"
+            else
+                DISTRO="unknown-linux"
+            fi
         fi
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         OS="macos"
         DISTRO="macos"
     else
-        print_error "不支持的操作系统: $OSTYPE"
-        exit 1
+        print_warning "未知操作系统: $OSTYPE，将尝试作为Linux处理"
+        OS="linux"
+        DISTRO="unknown-linux"
     fi
     
     print_info "检测到系统: $DISTRO"
@@ -162,9 +172,37 @@ install_python() {
                 exit 1
             fi
             ;;
+        unraid-os|slackware)
+            # Unraid OS 通常基于 Slackware
+            print_info "检测到 Unraid OS，尝试使用包管理器安装Python..."
+            if command -v slackpkg >/dev/null 2>&1; then
+                slackpkg install python3
+            elif command -v apt >/dev/null 2>&1; then
+                sudo apt update && sudo apt install -y python3 python3-pip
+            else
+                print_warning "Unraid OS: 未找到合适的包管理器，跳过Python安装"
+                print_info "请手动确保Python 3.8+已安装"
+            fi
+            ;;
+        unknown-linux)
+            # 尝试多种包管理器
+            print_info "未知Linux系统，尝试多种包管理器..."
+            if command -v apt >/dev/null 2>&1; then
+                sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+            elif command -v yum >/dev/null 2>&1; then
+                sudo yum install -y python3 python3-pip
+            elif command -v dnf >/dev/null 2>&1; then
+                sudo dnf install -y python3 python3-pip
+            elif command -v pacman >/dev/null 2>&1; then
+                sudo pacman -S python python-pip
+            else
+                print_warning "未找到支持的包管理器，跳过Python安装"
+                print_info "请手动确保Python 3.8+已安装"
+            fi
+            ;;
         *)
-            print_error "不支持的系统，请手动安装Python 3.8+"
-            exit 1
+            print_warning "不支持的系统: $DISTRO，跳过Python安装"
+            print_info "请手动确保Python 3.8+已安装"
             ;;
     esac
 }
@@ -184,6 +222,19 @@ install_pip() {
             ;;
         macos)
             print_warning "在MacOS上，请使用brew安装Python3，它会自动包含pip"
+            ;;
+        unraid-os|slackware|unknown-linux|*)
+            # 对于特殊系统，尝试多种方式安装pip
+            print_info "尝试安装pip3..."
+            if command -v apt >/dev/null 2>&1; then
+                sudo apt install -y python3-pip
+            elif command -v yum >/dev/null 2>&1; then
+                sudo yum install -y python3-pip
+            elif command -v dnf >/dev/null 2>&1; then
+                sudo dnf install -y python3-pip
+            else
+                print_warning "无法自动安装pip3，请手动安装"
+            fi
             ;;
     esac
 }

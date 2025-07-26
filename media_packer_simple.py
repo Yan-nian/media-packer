@@ -210,20 +210,18 @@ class TorrentCreator:
         if not self.config.auto_optimize:
             return self.config.piece_size if self.config.piece_size else 0
         
-        # VPS优化的Piece Size配置 - 更大的piece size提升性能
-        if total_size < 50 * 1024 * 1024:  # < 50MB
-            return 256 * 1024  # 256KB - 小文件适中配置
-        elif total_size < 500 * 1024 * 1024:  # < 500MB
-            return 1024 * 1024  # 1MB - 中小文件
+        # VPS极致优化的Piece Size配置 - 更大piece减少计算量
+        if total_size < 100 * 1024 * 1024:  # < 100MB
+            return 512 * 1024  # 512KB - 小文件
         elif total_size < 1 * 1024 * 1024 * 1024:  # < 1GB
-            return 2 * 1024 * 1024  # 2MB - 1GB以下文件
-        elif total_size < 4 * 1024 * 1024 * 1024:  # < 4GB
-            return 4 * 1024 * 1024  # 4MB - VPS环境下4GB文件最优
-        elif total_size < 16 * 1024 * 1024 * 1024:  # < 16GB
-            return 8 * 1024 * 1024  # 8MB - 大文件
-        elif total_size < 64 * 1024 * 1024 * 1024:  # < 64GB
-            return 16 * 1024 * 1024  # 16MB - 超大文件
-        else:  # >= 64GB
+            return 4 * 1024 * 1024  # 4MB - 1GB以下直接用4MB
+        elif total_size < 8 * 1024 * 1024 * 1024:  # < 8GB
+            return 8 * 1024 * 1024  # 8MB - VPS环境8GB以下最优
+        elif total_size < 32 * 1024 * 1024 * 1024:  # < 32GB  
+            return 16 * 1024 * 1024  # 16MB - 大文件
+        elif total_size < 128 * 1024 * 1024 * 1024:  # < 128GB
+            return 32 * 1024 * 1024  # 32MB - 超大文件极速模式
+        else:  # >= 128GB
             return 8 * 1024 * 1024  # 8MB - 巨大文件
     
     def _get_optimal_workers(self) -> int:
@@ -249,25 +247,27 @@ class TorrentCreator:
             load_avg = 0
             cpu_percent = 0
         
-        # 智能线程数计算 - VPS优化版本
+        # VPS极致优化线程算法 - 最大化利用CPU
         if physical_cores >= 32:  # 超高性能CPU（如双路服务器）
-            optimal_workers = min(20, physical_cores // 2)
+            optimal_workers = min(24, physical_cores)
         elif physical_cores >= 16:  # 高性能CPU（如至强E5、AMD EPYC）
-            optimal_workers = min(16, physical_cores // 2 + 2)
-        elif physical_cores >= 10:  # 10核心VPS优化（如Xeon 5115）
-            optimal_workers = min(12, physical_cores + 2)  # 10核用12线程
+            optimal_workers = min(20, physical_cores + 4)
+        elif physical_cores >= 10:  # 10核心VPS极致优化（如Xeon 5115）
+            optimal_workers = min(20, physical_cores * 2)  # 10核用20线程！
         elif physical_cores >= 8:  # 中高端CPU
-            optimal_workers = min(8, physical_cores + 1)
+            optimal_workers = min(12, physical_cores + 4)
         elif physical_cores >= 4:  # 主流CPU
-            optimal_workers = physical_cores + 1
+            optimal_workers = physical_cores + 2
         else:  # 低端CPU
-            optimal_workers = max(3, physical_cores)
+            optimal_workers = max(4, physical_cores)
         
-        # VPS环境特殊优化 - 更激进的线程策略
-        if cpu_percent < 50:  # CPU使用率低，可以使用更多线程
-            optimal_workers = min(optimal_workers + 2, 16)
+        # VPS环境超激进策略 - CPU使用率低时进一步增加线程
+        if cpu_percent < 30:  # CPU空闲时大胆使用更多线程
+            optimal_workers = min(optimal_workers + 4, 24)
+        elif cpu_percent < 50:  # CPU使用率较低
+            optimal_workers = min(optimal_workers + 2, 20)
         elif cpu_percent > 80 or load_avg > physical_cores * 0.8:
-            optimal_workers = max(2, optimal_workers // 2)
+            optimal_workers = max(4, optimal_workers // 2)
         
         # 添加内存限制检查
         try:
@@ -408,17 +408,18 @@ class TorrentCreator:
                                 speed = (pieces_done / elapsed) if elapsed > 0 else 0
                                 progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
                 
-                # 使用正确的torf多线程参数
+                # 使用正确的torf多线程参数 - 极致性能优化
                 try:
-                    # 使用threads参数启用多线程，interval降低回调频率
+                    # VPS环境极致优化：更少回调，更大间隔
                     torrent.generate(
                         callback=progress_callback, 
-                        interval=1.0,  # 每秒回调一次
-                        threads=optimal_workers  # 关键：使用threads参数而不是其他方法
+                        interval=2.0,  # 每2秒回调一次，减少I/O
+                        threads=optimal_workers  # 使用优化后的线程数
                     )
                 except TypeError:
-                    # 降级到无回调的多线程模式
+                    # 降级到无回调的多线程模式（最快）
                     try:
+                        console.print(f"[yellow]使用无回调模式以获得最佳性能[/yellow]")
                         torrent.generate(threads=optimal_workers)
                         progress.update(task, completed=100)
                     except TypeError:
