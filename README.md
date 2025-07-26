@@ -4,19 +4,42 @@
 ![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-一个专门为PT站用户设计的轻量级种子制作工具，特别优化了文件夹命名和自动化流程。
+一个专门为PT站用户设计的轻├── 📄 R## 📂 项目结构
+
+```
+media-packer/
+├── 📄 README.md                    # 项目说明文档
+├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
+├── 📄 PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
+├── 📄 UNIVERSAL_INSTALL_GUIDE.md   # 通用安装脚本详细说明
+├── 📄 USAGE_EXAMPLES.md            # 详细使用示例
+├── 🐍 start.py                     # 智能启动器
+├── 🐍 media_packer_simple.py       # 简化版主程序
+├── 🐍 media_packer_all_in_one.py   # 完整版主程序
+├── 🐍 install_deps.py              # 依赖安装工具
+├── 🔧 universal-install.sh         # 通用智能安装脚本（推荐）
+├── 📋 requirements.txt             # Python依赖列表
+├── 📦 pyproject.toml               # 项目配置
+└── 📁 output/                      # 输出目录           # 项目说明文档
+├── 📄 VPS_DEPLOYMENT_GUIDE.md      # VPS部署完整指南
+├── 📄 PYTHON_ENV_GUIDE.md          # Python环境问题解决指南
+├── 📄 UNIVERSAL_INSTALL_GUIDE.md   # 通用安装脚本详细说明
+├── 📄 USAGE_EXAMPLES.md            # 详细使用示例制作工具，特别优化了文件夹命名和自动化流程。
 
 ## 🌟 一键使用
 
 ```bash
-# 🚀 最简单的方式 - 一行命令立即使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash
+# ⚡ 通用一键安装（强烈推荐）- 自动检测系统，智能安装
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 
-# 🔧 直接生成种子
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- pack /path/to/video.mkv
+# � 静默安装简化版
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet --simple
 
-# 📦 安装到本地永久使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+# � 安装完整版
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --full
+
+# 🎯 自定义安装路径
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --path /opt/media-packer
 ```
 
 **无需下载仓库，无需Git，一个命令搞定！**
@@ -34,36 +57,45 @@ curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.
 
 ### ⚡ 一键使用（无需下载仓库）
 
-#### 方式1: 超级快速使用（推荐）
+#### 方式1: 通用智能安装（强烈推荐）
 ```bash
-# 一行命令，直接使用（临时）
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash
+# 自动检测系统，智能选择最佳安装方式
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 
-# 带参数直接生成种子
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- pack /path/to/video.mkv --name "MyTorrent"
-
-# 批量处理
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- batch /path/to/videos/*
+# 安装后直接使用
+media-packer                              # 交互式使用
+media-packer pack /path/to/video.mkv     # 直接生成种子
+media-packer batch /path/to/videos/*     # 批量处理
 ```
 
-#### 方式2: 一键安装到本地
+#### 方式2: 静默安装（无交互）
 ```bash
-# 安装到 ~/.media-packer 目录，可重复使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+# 静默安装简化版
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet --simple
 
-# 安装后使用（重启终端后可用）
-media-packer
+# 静默安装完整版
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet --full
+```
+
+#### 方式3: 自定义安装
+```bash
+# 安装到指定目录
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --path /opt/media-packer
+
+# 仅检查环境不安装
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --check
 ```
 
 **特性：**
 - ✅ **零配置** - 无需git，无需clone仓库
+- ✅ **智能安装** - 自动检测系统，选择最佳安装方式
 - ✅ **自动安装依赖** - 自动检查和安装Python包
 - ✅ **跨平台** - 支持Linux、macOS、Windows(WSL)
-- ✅ **即用即走** - 临时使用或永久安装任你选择
+- ✅ **多种模式** - 支持简化版、完整版、自定义安装
 
 ### 本地开发使用
 
-#### 方式3: 传统Git方式（开发者）
+#### 方式1: 传统Git方式（开发者）
 ```bash
 # 下载项目
 git clone https://github.com/Yan-nian/media-packer.git
@@ -76,44 +108,62 @@ python3 start.py
 python3 media_packer_simple.py
 ```
 
+#### 方式2: 直接下载使用
+```bash
+# 下载主程序文件
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/media_packer_simple.py -o media_packer_simple.py
+
+# 安装依赖后直接使用
+pip install torf click rich
+python3 media_packer_simple.py
+```
+
 ### 🖥️ VPS 服务器部署
 
-#### ⚡ 超级快速使用（无需Git）
+### 🖥️ VPS 服务器部署
+
+#### ⚡ 一键智能安装（推荐）
 ```bash
-# 直接使用，无需下载仓库
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash
+# 通用智能安装（自动适配VPS环境）
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 
-# VPS上直接生成种子
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- pack /data/video.mkv --name "VPS_Torrent"
-
-# VPS批量处理
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- batch /data/videos/* --organize
-```
-
-#### 🚀 一键安装到VPS
-```bash
-# 安装到VPS，可重复使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+# VPS专用静默安装
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet --simple
 
 # 安装后直接使用
-media-packer pack /data/video.mkv --name "My_Torrent"
+media-packer pack /data/video.mkv --name "VPS_Torrent"
+media-packer batch /data/videos/* --organize
 ```
 
-#### 🔧 VPS专用部署脚本（功能最全）
+#### 🎯 高级VPS使用
 ```bash
-# 下载并运行VPS专用部署脚本
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/vps_quick_start.sh -o vps_quick_start.sh
-chmod +x vps_quick_start.sh
-./vps_quick_start.sh
+# 自定义VPS安装路径
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --path /opt/media-packer --quiet
+
+# 批量处理多个文件
+media-packer batch /data/videos/* --name "Batch_$(date +%Y%m%d)"
+
+# 使用完整版（包含元数据功能）
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --full --quiet
+media-packer-full pack /data/video.mkv
 ```
 
-**脚本对比：**
+#### 🔧 VPS专用部署脚本（传统方式）
+```bash
+# 传统Git方式部署
+git clone https://github.com/Yan-nian/media-packer.git
+cd media-packer
+python3 start.py
+```
 
-| 脚本 | 适用场景 | 特点 |
-|------|----------|------|
-| `quick-use.sh` | 临时使用、测试 | 无需安装，即用即走 |
-| `install.sh` | 个人VPS、长期使用 | 安装到本地，可重复使用 |
-| `vps_quick_start.sh` | 专业部署、团队使用 | 功能最全，支持多种配置 |
+**安装方式对比：**
+
+| 安装方式 | 适用场景 | 特点 | 推荐指数 |
+|---------|---------|------|----------|
+| `universal-install.sh` | 所有用户 | 智能检测，最佳安装方式 | ⭐⭐⭐⭐⭐ |
+| `universal-install.sh --simple` | 轻量使用 | 仅核心功能，快速安装 | ⭐⭐⭐⭐⭐ |
+| `universal-install.sh --full` | 高级用户 | 完整功能，包含元数据 | ⭐⭐⭐⭐ |
+| 直接下载 | 开发测试 | 手动管理，灵活控制 | ⭐⭐⭐ |
 
 #### 📋 手动部署流程
 
@@ -252,10 +302,7 @@ media-packer/
 ├── 🐍 media_packer_simple.py       # 简化版主程序
 ├── 🐍 media_packer_all_in_one.py   # 完整版主程序
 ├── 🐍 install_deps.py              # 依赖安装工具
-├── 🔧 setup.sh                     # Shell安装脚本
-├── 🔧 install.sh                   # 一键安装脚本
-├── 🔧 quick-use.sh                 # 一键使用脚本（无需安装）
-├── 🔧 vps_quick_start.sh           # VPS快速启动脚本
+├── 🔧 universal-install.sh         # 通用智能安装脚本（推荐）
 ├── 📋 requirements.txt             # Python依赖列表
 ├── 📦 pyproject.toml               # 项目配置
 └── 📁 output/                      # 输出目录
@@ -265,11 +312,11 @@ media-packer/
 
 | 启动方式 | 用户类型 | 复杂度 | 安装需求 | 推荐指数 |
 |----------|----------|--------|----------|----------|
-| `quick-use.sh` | 所有用户 | ⭐ | 无需安装 | ⭐⭐⭐⭐⭐ |
-| `install.sh` | 长期用户 | ⭐⭐ | 安装到本地 | ⭐⭐⭐⭐⭐ |
-| `python3 start.py` | 开发用户 | ⭐⭐ | 需要Git | ⭐⭐⭐⭐ |
-| `./setup.sh` | Linux/macOS | ⭐⭐ | 需要Git | ⭐⭐⭐ |
-| `vps_quick_start.sh` | VPS用户 | ⭐⭐⭐ | 专业部署 | ⭐⭐⭐⭐ |
+| `universal-install.sh` | 所有用户 | ⭐ | 智能安装 | ⭐⭐⭐⭐⭐ |
+| `universal-install.sh --simple` | 轻量用户 | ⭐ | 简化安装 | ⭐⭐⭐⭐⭐ |
+| `universal-install.sh --full` | 高级用户 | ⭐⭐ | 完整安装 | ⭐⭐⭐⭐ |
+| `python3 start.py` | 开发用户 | ⭐⭐ | 需要Git | ⭐⭐⭐ |
+| 直接下载主文件 | 测试用户 | ⭐⭐⭐ | 手动管理 | ⭐⭐ |
 │   ├── 🐍 interactive.py           # 交互界面
 │   ├── 📁 core/                    # 核心功能
 │   ├── 📁 gui/                     # GUI组件
@@ -298,16 +345,12 @@ media-packer/
 
 ### 1. PT站自动制种
 ```bash
-# 方式1: 一键临时使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- batch /data/videos/* --organize
-
-# 方式2: 安装后使用
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+# 一键智能安装后使用
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 media-packer batch /data/videos/* --organize
 
-# 方式3: 传统方式
-scp -r /local/videos/ user@vps-ip:/data/videos/
-ssh user@vps-ip
+# 传统Git方式
+git clone https://github.com/Yan-nian/media-packer.git
 cd media-packer
 python3 media_packer_simple.py batch /data/videos/* --organize
 ```
@@ -318,13 +361,14 @@ python3 media_packer_simple.py batch /data/videos/* --organize
 crontab -e
 
 # 每小时检查新文件并制种
-0 * * * * /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- batch /data/new_videos/* --name "Auto_$(date +\%Y\%m\%d_\%H)" > /var/log/media-packer.log 2>&1'
+0 * * * * /bin/bash -c 'media-packer batch /data/new_videos/* --name "Auto_$(date +\%Y\%m\%d_\%H)" > /var/log/media-packer.log 2>&1'
 ```
 
 ### 3. 一次性使用
 ```bash
-# 直接在VPS上生成种子，用完即走
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-use.sh | bash -s -- pack /data/video.mkv --name "MyTorrent" --output /data/torrents
+# 智能安装后直接使用
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash -s -- --quiet
+media-packer pack /data/video.mkv --name "MyTorrent" --output /data/torrents
 ```
 
 ### 3. API服务模式
@@ -348,8 +392,8 @@ curl -X POST http://vps-ip:8080/api/create_torrent \
 # 错误: externally-managed-environment
 # 这是Ubuntu 23.04+/Debian 12+的新限制
 
-# 解决方案1: 使用我们的一键脚本（自动处理）
-curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/install.sh | bash
+# 解决方案1: 使用通用安装脚本（自动处理）
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/universal-install.sh | bash
 
 # 解决方案2: 手动创建虚拟环境
 python3 -m venv ~/.media-packer-env
@@ -522,10 +566,11 @@ python3 media_packer_simple.py interactive
 ## 📞 支持和反馈
 
 如果遇到问题或有建议，请：
-1. 查看 [VPS_DEPLOYMENT_GUIDE.md](VPS_DEPLOYMENT_GUIDE.md) - VPS部署完整指南
-2. 查看 [PYTHON_ENV_GUIDE.md](PYTHON_ENV_GUIDE.md) - Python环境问题解决
-3. 提交 [Issue](https://github.com/Yan-nian/media-packer/issues)
-4. 发起 [Discussion](https://github.com/Yan-nian/media-packer/discussions)
+1. 查看 [UNIVERSAL_INSTALL_GUIDE.md](UNIVERSAL_INSTALL_GUIDE.md) - 通用安装脚本详细说明
+2. 查看 [VPS_DEPLOYMENT_GUIDE.md](VPS_DEPLOYMENT_GUIDE.md) - VPS部署完整指南
+3. 查看 [PYTHON_ENV_GUIDE.md](PYTHON_ENV_GUIDE.md) - Python环境问题解决
+4. 提交 [Issue](https://github.com/Yan-nian/media-packer/issues)
+5. 发起 [Discussion](https://github.com/Yan-nian/media-packer/discussions)
 
 ---
 
