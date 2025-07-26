@@ -314,6 +314,7 @@ download_files() {
         "start.py"
         "requirements.txt"
         "install_deps.py"
+        "version.py"
     )
     
     # 如果是完整版，额外下载完整版文件
