@@ -179,19 +179,19 @@ create_install_dir() {
 
 # 下载项目文件
 download_files() {
-    print_info "下载Media Packer文件..."
+    print_info "下载Media Packer核心文件..."
     
-    # 核心文件列表
+    # 精简的核心文件列表 - 只下载必要文件
     FILES=(
         "media_packer_simple.py"
-        "media_packer_all_in_one.py"
         "start.py"
-        "install_deps.py"
         "requirements.txt"
-        "pyproject.toml"
-        "README.md"
-        "CLAUDE.md"
     )
+    
+    # 如果是完整版，额外下载完整版文件
+    if [ "$MODE" = "full" ]; then
+        FILES+=("media_packer_all_in_one.py")
+    fi
     
     # 这里使用实际的GitHub仓库地址
     BASE_URL="https://raw.githubusercontent.com/Yan-nian/media-packer/main"
@@ -230,24 +230,56 @@ install_dependencies() {
     
     print_info "安装Python依赖..."
     
-    # 检测是否需要虚拟环境 (针对现代Python环境限制)
-    if python3 -m pip install --dry-run torf 2>&1 | grep -q "externally-managed-environment"; then
-        print_warning "检测到Python环境限制，创建虚拟环境..."
-        python3 -m venv venv
-        source venv/bin/activate
-        VENV_CREATED=true
-    fi
-    
-    # 根据模式安装依赖
+    # 依赖包列表
     if [ "$MODE" = "full" ]; then
+        DEPS="torf click rich psutil requests tmdbv3api pymediainfo"
         print_info "安装完整版依赖..."
-        python3 -m pip install --user torf click rich psutil requests tmdbv3api pymediainfo
     else
+        DEPS="torf click rich psutil"
         print_info "安装简化版依赖..."
-        python3 -m pip install --user torf click rich psutil
     fi
     
-    print_success "依赖安装完成"
+    # 尝试不同的安装方式
+    install_success=false
+    
+    # 方法1: 尝试普通用户安装
+    if python3 -m pip install --user $DEPS >/dev/null 2>&1; then
+        print_success "依赖安装成功（用户模式）"
+        install_success=true
+    # 方法2: 尝试break-system-packages（针对现代Python限制）
+    elif python3 -m pip install --user --break-system-packages $DEPS >/dev/null 2>&1; then
+        print_success "依赖安装成功（系统包模式）"
+        install_success=true
+    # 方法3: 尝试系统包管理器
+    elif [ "$install_success" = "false" ]; then
+        print_warning "pip安装失败，尝试系统包管理器..."
+        case $DISTRO in
+            ubuntu|debian)
+                if sudo apt update && sudo apt install -y python3-torf python3-click python3-rich >/dev/null 2>&1; then
+                    print_success "依赖安装成功（系统包）"
+                    install_success=true
+                fi
+                ;;
+        esac
+    fi
+    
+    # 方法4: 最后尝试虚拟环境（但不设置为默认）
+    if [ "$install_success" = "false" ]; then
+        print_warning "创建虚拟环境..."
+        if python3 -m venv venv && source venv/bin/activate && python3 -m pip install $DEPS; then
+            print_success "依赖安装成功（虚拟环境）"
+            # 创建激活虚拟环境的提示文件
+            echo "# 注意：此安装使用了虚拟环境" > venv_info.txt
+            echo "# 运行前需要激活：source venv/bin/activate" >> venv_info.txt
+            install_success=true
+        fi
+    fi
+    
+    if [ "$install_success" = "false" ]; then
+        print_error "依赖安装失败，请手动安装："
+        print_error "python3 -m pip install --user $DEPS"
+        exit 1
+    fi
 }
 
 # 创建系统命令链接
@@ -256,20 +288,21 @@ create_symlinks() {
         return
     fi
     
-    print_info "创建系统命令链接..."
+    print_info "创建启动命令..."
     
-    # 创建启动脚本
+    # 创建智能启动脚本
     cat > media-packer << 'EOF'
 #!/bin/bash
 INSTALL_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$INSTALL_DIR"
 
-# 如果有虚拟环境，先激活
+# 检查是否有虚拟环境
 if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
 fi
 
-python3 start.py "$@"
+# 直接运行简化版，避免交互
+python3 media_packer_simple.py "$@"
 EOF
     
     chmod +x media-packer
@@ -279,8 +312,11 @@ EOF
         ln -sf "$INSTALL_DIR/media-packer" /usr/local/bin/media-packer
         print_success "创建系统命令: media-packer"
     elif command -v sudo >/dev/null 2>&1; then
-        sudo ln -sf "$INSTALL_DIR/media-packer" /usr/local/bin/media-packer
-        print_success "创建系统命令: media-packer"
+        sudo ln -sf "$INSTALL_DIR/media-packer" /usr/local/bin/media-packer 2>/dev/null && {
+            print_success "创建系统命令: media-packer"
+        } || {
+            print_warning "无法创建系统命令链接，请手动添加到PATH: $INSTALL_DIR"
+        }
     else
         print_warning "无法创建系统命令链接，请手动添加到PATH: $INSTALL_DIR"
     fi
@@ -305,14 +341,16 @@ EOF
 run_test() {
     print_info "运行功能测试..."
     
+    # 如果有虚拟环境，先激活
     if [ -f "venv/bin/activate" ]; then
         source venv/bin/activate
     fi
     
+    # 测试简化版程序
     if python3 media_packer_simple.py --help >/dev/null 2>&1; then
         print_success "功能测试通过"
     else
-        print_error "功能测试失败"
+        print_error "功能测试失败，请检查依赖安装"
         exit 1
     fi
 }
@@ -327,23 +365,23 @@ show_completion() {
     echo -e "${GREEN}使用方法:${NC}"
     
     if [ "$CREATE_SYMLINK" = "true" ] && [ -f "/usr/local/bin/media-packer" ]; then
-        echo "  media-packer                          # 启动交互界面"
-        echo "  media-packer pack /path/to/video.mkv  # 直接制种"
-        echo "  media-packer batch /path/to/videos/*  # 批量制种"
+        echo "  media-packer pack /path/to/video.mkv     # 直接制种"
+        echo "  media-packer batch /path/to/videos/*     # 批量制种"
+        echo "  media-packer interactive                 # 交互界面"
     else
         echo "  cd $INSTALL_DIR"
-        echo "  python3 start.py                      # 启动交互界面"
-        echo "  python3 media_packer_simple.py pack /path/to/video.mkv  # 直接制种"
+        echo "  ./media-packer pack /path/to/video.mkv   # 直接制种"
+        echo "  python3 media_packer_simple.py --help    # 查看帮助"
     fi
     
     echo ""
     echo -e "${YELLOW}提示:${NC}"
-    echo "  • 首次运行会自动检查和安装缺失依赖"
-    echo "  • 支持自动CPU线程优化和智能Piece Size选择"
-    echo "  • 配置文件位于: $INSTALL_DIR/config.json"
+    echo "  • 已启用智能性能优化（自动CPU线程检测）"
+    echo "  • 支持自动Piece Size选择和系统负载监控"
+    echo "  • 精简安装，仅包含核心功能文件"
     
-    if [ "$VENV_CREATED" = "true" ]; then
-        echo "  • 已创建Python虚拟环境，无需担心依赖冲突"
+    if [ -f "venv_info.txt" ]; then
+        echo "  • 使用了虚拟环境，运行时会自动激活"
     fi
 }
 
