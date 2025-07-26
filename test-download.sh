@@ -39,8 +39,7 @@ show_install_options() {
     echo "5) 🔍 系统检查        - 仅检查环境，不安装"
     echo
     
-    # 检查是否为交互式终端
-    if [ "$QUIET_MODE" != true ] && [ -t 0 ] && [ -t 1 ]; then
+    if [ "$QUIET_MODE" != true ]; then
         read -p "请选择 (1-5, 默认1): " choice
         case $choice in
             2) INSTALL_MODE="simple" ;;
@@ -50,7 +49,6 @@ show_install_options() {
             *) INSTALL_MODE="auto" ;;
         esac
     else
-        echo "检测到非交互式环境，使用默认安装模式..."
         INSTALL_MODE="auto"
     fi
     
@@ -61,12 +59,6 @@ show_install_options() {
 custom_install_options() {
     echo -e "${CYAN}${BOLD}自定义安装配置：${NC}"
     echo
-    
-    # 检查是否为交互式终端
-    if [ ! -t 0 ] || [ ! -t 1 ]; then
-        print_warning "非交互式环境，使用默认配置"
-        return 0
-    fi
     
     # 选择安装路径
     echo -e "${YELLOW}1. 安装路径：${NC}"
@@ -118,26 +110,16 @@ custom_install_options() {
     fi
 }
 show_welcome() {
-    # 确保在非交互式环境中也能正常显示
-    if [ ! -t 1 ]; then
-        # 非交互式环境，使用简化输出
-        echo "=== Media Packer v$VERSION 通用安装脚本 ==="
-        echo "一个专门为PT站用户设计的轻量级种子制作工具"
-        echo "无需Git，无需仓库，一键安装所有功能"
-        echo
-    else
-        # 交互式环境，使用彩色输出
-        clear
-        echo -e "${GREEN}${BOLD}"
-        echo "╔══════════════════════════════════════════════════════════════╗"
-        echo "║                    Media Packer v$VERSION                        ║"
-        echo "║                   通用一键安装脚本                            ║"
-        echo "╚══════════════════════════════════════════════════════════════╝"
-        echo -e "${NC}"
-        echo -e "${CYAN}🚀 一个专门为PT站用户设计的轻量级种子制作工具${NC}"
-        echo -e "${CYAN}📦 无需Git，无需仓库，一键安装所有功能${NC}"
-        echo
-    fi
+    clear
+    echo -e "${GREEN}${BOLD}"
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                    Media Packer v$VERSION                        ║"
+    echo "║                   通用一键安装脚本                            ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo -e "${CYAN}🚀 一个专门为PT站用户设计的轻量级种子制作工具${NC}"
+    echo -e "${CYAN}📦 无需Git，无需仓库，一键安装所有功能${NC}"
+    echo
 }
 
 # 检测操作系统
@@ -186,14 +168,10 @@ detect_system() {
     # 检测是否为root用户
     if [ "$EUID" -eq 0 ]; then
         print_warning "检测到root用户，建议使用普通用户运行"
-        if [ -t 0 ] && [ -t 1 ]; then
-            read -p "是否继续？(y/N): " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                exit 1
-            fi
-        else
-            print_warning "非交互式环境，自动继续..."
+        read -p "是否继续？(y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
         fi
     fi
 }
@@ -322,18 +300,14 @@ create_install_dir() {
     
     # 删除旧安装（如果存在）
     if [ -d "$INSTALL_DIR" ]; then
-        print_warning "发现现有安装"
-        if [ -t 0 ] && [ -t 1 ]; then
-            read -p "覆盖现有安装？(y/N): " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                rm -rf "$INSTALL_DIR"
-                print_info "已删除旧安装"
-            else
-                print_info "保留现有安装，仅更新文件"
-            fi
+        print_warning "发现现有安装，是否覆盖？"
+        read -p "覆盖现有安装？(y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -rf "$INSTALL_DIR"
+            print_info "已删除旧安装"
         else
-            print_info "非交互式环境，保留现有安装，仅更新文件"
+            print_info "保留现有安装，仅更新文件"
         fi
     fi
     
@@ -916,7 +890,6 @@ main() {
 }
 
 # 脚本入口点
-# 支持直接执行和管道执行
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ "${BASH_SOURCE[0]}" == "bash" ]] || [[ -z "${BASH_SOURCE[0]}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
