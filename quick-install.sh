@@ -25,6 +25,13 @@ MODE="simple"
 QUIET=false
 CREATE_SYMLINK=true
 SKIP_DEPS=false
+UPDATE_MODE=false
+BACKUP_OLD=true
+FORCE_INSTALL=false
+
+# 版本信息
+SCRIPT_VERSION="2.1.0"
+VERSION_FILE=".version"
 
 # 帮助信息
 show_help() {
@@ -39,6 +46,9 @@ show_help() {
     echo "  --quiet         静默安装"
     echo "  --no-symlink    不创建系统命令链接"
     echo "  --skip-deps     跳过依赖安装"
+    echo "  --update        更新模式，保留配置文件"
+    echo "  --force         强制安装，覆盖现有版本"
+    echo "  --no-backup     不备份旧版本"
     echo "  --help          显示此帮助信息"
     echo ""
     echo "示例:"
@@ -170,20 +180,97 @@ install_pip() {
     esac
 }
 
-# 创建安装目录
+# 检测现有安装
+check_existing_installation() {
+    if [ -d "$INSTALL_DIR" ]; then
+        print_info "检测到现有安装: $INSTALL_DIR"
+        
+        # 检查版本文件
+        if [ -f "$INSTALL_DIR/$VERSION_FILE" ]; then
+            OLD_VERSION=$(cat "$INSTALL_DIR/$VERSION_FILE" 2>/dev/null || echo "未知")
+            print_info "当前版本: $OLD_VERSION"
+            print_info "新版本: $SCRIPT_VERSION"
+            
+            if [ "$OLD_VERSION" = "$SCRIPT_VERSION" ] && [ "$FORCE_INSTALL" != "true" ]; then
+                print_success "已安装最新版本 $SCRIPT_VERSION"
+                if [ "$QUIET" != "true" ]; then
+                    echo "使用 --force 参数强制重新安装"
+                fi
+                exit 0
+            fi
+        else
+            print_warning "未找到版本信息，可能是旧版本安装"
+            OLD_VERSION="旧版本"
+        fi
+        
+        # 询问是否继续（除非是强制或静默模式）
+        if [ "$FORCE_INSTALL" != "true" ] && [ "$QUIET" != "true" ]; then
+            echo ""
+            echo "发现现有安装:"
+            echo "  位置: $INSTALL_DIR"
+            echo "  当前版本: $OLD_VERSION"
+            echo "  新版本: $SCRIPT_VERSION"
+            echo ""
+            read -p "是否继续安装？(y/N): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_info "安装已取消"
+                exit 0
+            fi
+        fi
+        
+        return 0
+    else
+        print_info "首次安装到: $INSTALL_DIR"
+        return 1
+    fi
+}
+
+# 备份现有安装
+backup_existing() {
+    if [ ! -d "$INSTALL_DIR" ] || [ "$BACKUP_OLD" != "true" ]; then
+        return
+    fi
+    
+    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+    print_info "备份现有安装到: $backup_dir"
+    
+    if cp -r "$INSTALL_DIR" "$backup_dir"; then
+        print_success "备份完成"
+        echo "# 备份信息" > "$backup_dir/backup_info.txt"
+        echo "备份时间: $(date)" >> "$backup_dir/backup_info.txt"
+        echo "原版本: $(cat "$INSTALL_DIR/$VERSION_FILE" 2>/dev/null || echo "未知")" >> "$backup_dir/backup_info.txt"
+        echo "新版本: $SCRIPT_VERSION" >> "$backup_dir/backup_info.txt"
+    else
+        print_warning "备份失败，继续安装..."
+    fi
+}
+
+# 创建/准备安装目录
 create_install_dir() {
-    print_info "创建安装目录: $INSTALL_DIR"
+    # 如果是更新模式，保留配置文件
+    local config_backup=""
+    if [ "$UPDATE_MODE" = "true" ] && [ -f "$INSTALL_DIR/config.json" ]; then
+        config_backup=$(mktemp)
+        cp "$INSTALL_DIR/config.json" "$config_backup"
+        print_info "保留现有配置文件"
+    fi
+    
+    print_info "准备安装目录: $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
+    
+    # 恢复配置文件
+    if [ -n "$config_backup" ] && [ -f "$config_backup" ]; then
+        cp "$config_backup" "$INSTALL_DIR/config.json"
+        rm -f "$config_backup"
+        print_info "已恢复配置文件"
+    fi
 }
 
 # 下载项目文件
 download_files() {
     print_info "下载Media Packer核心文件..."
-    
-    # 精简的核心文件列表 - 只下载必要文件
-    FILES=(
-        "media_packer_simple.py"
         "start.py"
         "requirements.txt"
     )
