@@ -19,8 +19,9 @@ def check_and_install_dependencies():
     """检查并自动安装依赖"""
     required_packages = {
         'torf': 'torf>=4.0.0',
-        'click': 'click>=8.0.0',
-        'rich': 'rich>=13.0.0'
+        'click': 'click>=8.0.0', 
+        'rich': 'rich>=13.0.0',
+        'psutil': 'psutil>=5.8.0'  # 性能监控依赖
     }
     
     missing_packages = []
@@ -194,35 +195,62 @@ class TorrentCreator:
         self.config = config
     
     def _get_optimal_piece_size(self, total_size: int) -> int:
-        """根据文件大小获取最优piece size"""
+        """根据文件大小获取最优piece size - 性能优化版本"""
         if not self.config.auto_optimize:
             return self.config.piece_size if self.config.piece_size else 0
         
-        # 基于性能分析的最优配置
-        if total_size < 100 * 1024 * 1024:  # < 100MB
-            return 256 * 1024  # 256KB
-        elif total_size < 1024 * 1024 * 1024:  # < 1GB
-            return 1024 * 1024  # 1MB
-        elif total_size < 10 * 1024 * 1024 * 1024:  # < 10GB
-            return 2 * 1024 * 1024  # 2MB
-        else:  # >= 10GB
-            return 4 * 1024 * 1024  # 4MB
+        # 更精确的性能优化配置
+        if total_size < 50 * 1024 * 1024:  # < 50MB
+            return 128 * 1024  # 128KB - 小文件使用更小piece size
+        elif total_size < 500 * 1024 * 1024:  # < 500MB
+            return 512 * 1024  # 512KB - 中小文件
+        elif total_size < 2 * 1024 * 1024 * 1024:  # < 2GB
+            return 1024 * 1024  # 1MB - 标准配置
+        elif total_size < 8 * 1024 * 1024 * 1024:  # < 8GB
+            return 2 * 1024 * 1024  # 2MB - 大文件
+        elif total_size < 32 * 1024 * 1024 * 1024:  # < 32GB
+            return 4 * 1024 * 1024  # 4MB - 超大文件
+        else:  # >= 32GB
+            return 8 * 1024 * 1024  # 8MB - 巨大文件
     
     def _get_optimal_workers(self) -> int:
-        """获取最优工作线程数"""
+        """获取最优工作线程数 - 自动检测CPU核心数并优化"""
         if not self.config.auto_optimize:
             return self.config.max_workers if self.config.max_workers else 1
         
         import multiprocessing
-        cpu_count = multiprocessing.cpu_count()
+        import psutil
         
-        # 基于性能分析：最佳线程数约为CPU核心数的一半，最大不超过4
-        if cpu_count >= 8:
-            return 4
-        elif cpu_count >= 4:
-            return cpu_count // 2
-        else:
-            return max(1, cpu_count - 1)
+        # 获取物理CPU核心数（更准确）
+        try:
+            physical_cores = psutil.cpu_count(logical=False) or multiprocessing.cpu_count()
+            logical_cores = psutil.cpu_count(logical=True) or multiprocessing.cpu_count()
+        except:
+            physical_cores = logical_cores = multiprocessing.cpu_count()
+        
+        # 检测系统负载
+        try:
+            load_avg = psutil.getloadavg()[0] if hasattr(psutil, 'getloadavg') else 0
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+        except:
+            load_avg = 0
+            cpu_percent = 0
+        
+        # 智能线程数计算 - 性能优先策略
+        if physical_cores >= 16:  # 高性能CPU
+            optimal_workers = min(8, physical_cores // 2)
+        elif physical_cores >= 8:  # 中高端CPU
+            optimal_workers = min(6, physical_cores // 2 + 1)
+        elif physical_cores >= 4:  # 主流CPU
+            optimal_workers = physical_cores // 2 + 1
+        else:  # 低端CPU
+            optimal_workers = max(2, physical_cores)
+        
+        # 根据系统负载动态调整
+        if cpu_percent > 80 or load_avg > physical_cores * 0.8:
+            optimal_workers = max(1, optimal_workers // 2)
+        
+        return min(optimal_workers, 8)  # 最大8线程，避免过度并发
     
     def _calculate_total_size(self, content_path: Path) -> int:
         """计算内容总大小"""
@@ -250,7 +278,23 @@ class TorrentCreator:
             optimal_workers = self._get_optimal_workers()
             
             if self.config.auto_optimize:
-                console.print(f"[yellow]性能优化 - Piece Size: {optimal_piece_size // 1024} KB, 线程数: {optimal_workers}[/yellow]")
+                # 显示详细的性能优化信息
+                size_mb = total_size / (1024 * 1024)
+                piece_mb = optimal_piece_size / (1024 * 1024) if optimal_piece_size >= 1024*1024 else optimal_piece_size / 1024
+                piece_unit = "MB" if optimal_piece_size >= 1024*1024 else "KB"
+                
+                console.print(f"[green]🚀 智能性能优化[/green]")
+                console.print(f"[cyan]  📁 文件大小: {size_mb:.1f} MB[/cyan]")
+                console.print(f"[cyan]  🧩 Piece Size: {piece_mb:.0f} {piece_unit}[/cyan]")
+                console.print(f"[cyan]  🔥 线程数: {optimal_workers}[/cyan]")
+                
+                # 获取CPU信息
+                try:
+                    import psutil
+                    cpu_count = psutil.cpu_count(logical=False) or 1
+                    console.print(f"[dim]  💻 检测到 {cpu_count} 核心CPU[/dim]")
+                except:
+                    pass
             
             # 创建种子
             torrent = torf.Torrent(
@@ -487,7 +531,12 @@ class InteractiveMediaPacker:
             "• 智能媒体文件识别\n"
             "• 种子文件生成\n"
             "• 批量处理支持\n"
-            "• 交互式操作界面\n\n"
+            "• 交互式操作界面\n"
+            "• [bold cyan]自动性能优化 (默认启用)[/bold cyan]\n\n"
+            "[cyan]性能优化特性:[/cyan]\n"
+            "• 智能 piece size 选择\n"
+            "• 多线程加速制种\n"
+            "• VPS 环境优化\n\n"
             "[yellow]注意: 此版本专注于种子生成，不包含元数据获取功能[/yellow]",
             title="欢迎使用 Media Packer",
             border_style="blue"
@@ -1479,10 +1528,13 @@ class InteractiveMediaPacker:
         
         self.console.print(f"\n[bold]开始处理 {len(pending_tasks)} 个任务...[/bold]")
         
-        # 创建配置
+        # 创建配置 - 默认启用性能优化
         config = Config(
             trackers=self.trackers,
-            output_dir=Path(self.output_directory)
+            output_dir=Path(self.output_directory),
+            auto_optimize=True,  # 默认启用性能优化
+            max_workers=4,  # 默认4线程（根据性能测试的最佳配置）
+            piece_size=None  # 让系统自动选择最优piece size
         )
         
         packer = MediaPacker(config)
