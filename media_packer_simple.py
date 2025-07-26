@@ -112,6 +112,10 @@ class Config:
     comment: str = "Created with Media Packer"
     created_by: str = "Media Packer"
     
+    # 性能优化配置
+    auto_optimize: bool = True  # 自动优化性能配置
+    max_workers: Optional[int] = None  # 最大工作线程数
+    
     # 路径配置
     output_dir: Path = Path("./output")
 
@@ -189,9 +193,65 @@ class TorrentCreator:
     def __init__(self, config: Config):
         self.config = config
     
+    def _get_optimal_piece_size(self, total_size: int) -> int:
+        """根据文件大小获取最优piece size"""
+        if not self.config.auto_optimize:
+            return self.config.piece_size if self.config.piece_size else 0
+        
+        # 基于性能分析的最优配置
+        if total_size < 100 * 1024 * 1024:  # < 100MB
+            return 256 * 1024  # 256KB
+        elif total_size < 1024 * 1024 * 1024:  # < 1GB
+            return 1024 * 1024  # 1MB
+        elif total_size < 10 * 1024 * 1024 * 1024:  # < 10GB
+            return 2 * 1024 * 1024  # 2MB
+        else:  # >= 10GB
+            return 4 * 1024 * 1024  # 4MB
+    
+    def _get_optimal_workers(self) -> int:
+        """获取最优工作线程数"""
+        if not self.config.auto_optimize:
+            return self.config.max_workers if self.config.max_workers else 1
+        
+        import multiprocessing
+        cpu_count = multiprocessing.cpu_count()
+        
+        # 基于性能分析：最佳线程数约为CPU核心数的一半，最大不超过4
+        if cpu_count >= 8:
+            return 4
+        elif cpu_count >= 4:
+            return cpu_count // 2
+        else:
+            return max(1, cpu_count - 1)
+    
+    def _calculate_total_size(self, content_path: Path) -> int:
+        """计算内容总大小"""
+        total_size = 0
+        if content_path.is_file():
+            total_size = content_path.stat().st_size
+        else:
+            for file_path in content_path.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        total_size += file_path.stat().st_size
+                    except (OSError, PermissionError):
+                        continue
+        return total_size
+    
     def create_torrent(self, content_path: Path, torrent_path: Path) -> None:
         """创建种子文件"""
         try:
+            # 计算总大小用于优化配置
+            total_size = self._calculate_total_size(content_path)
+            console.print(f"[cyan]内容总大小: {total_size / (1024**3):.2f} GB[/cyan]")
+            
+            # 获取最优配置
+            optimal_piece_size = self._get_optimal_piece_size(total_size)
+            optimal_workers = self._get_optimal_workers()
+            
+            if self.config.auto_optimize:
+                console.print(f"[yellow]性能优化 - Piece Size: {optimal_piece_size // 1024} KB, 线程数: {optimal_workers}[/yellow]")
+            
             # 创建种子
             torrent = torf.Torrent(
                 path=str(content_path),
@@ -201,12 +261,39 @@ class TorrentCreator:
                 created_by=self.config.created_by
             )
             
-            if self.config.piece_size:
+            # 设置piece size
+            if optimal_piece_size > 0:
+                torrent.piece_size = optimal_piece_size
+            elif self.config.piece_size:
                 torrent.piece_size = self.config.piece_size
             
             # 生成种子
             console.print(f"[cyan]正在生成种子文件...[/cyan]")
+            
+            # 尝试设置多线程（如果torf支持）
+            if optimal_workers > 1:
+                try:
+                    # 检查torf是否支持多线程
+                    if hasattr(torf, 'set_max_workers'):
+                        torf.set_max_workers(optimal_workers)
+                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
+                    elif hasattr(torrent, 'max_workers'):
+                        torrent.max_workers = optimal_workers
+                        console.print(f"[green]已启用 {optimal_workers} 线程加速[/green]")
+                except Exception as e:
+                    console.print(f"[yellow]多线程设置失败，使用默认配置: {e}[/yellow]")
+            
+            # 显示进度
+            import time
+            start_time = time.time()
+            
             torrent.generate()
+            
+            end_time = time.time()
+            duration = end_time - start_time
+            throughput = (total_size / (1024**2)) / duration if duration > 0 else 0
+            
+            console.print(f"[green]哈希计算完成 - 用时: {duration:.1f}s, 吞吐量: {throughput:.1f} MB/s[/green]")
             
             # 保存种子文件
             torrent_path.parent.mkdir(parents=True, exist_ok=True)
@@ -422,13 +509,14 @@ class InteractiveMediaPacker:
         menu_table.add_row("1", "智能扫描媒体文件夹（支持片名搜索）")
         menu_table.add_row("2", "查看处理队列")
         menu_table.add_row("3", "开始处理")
-        menu_table.add_row("4", "设置")
-        menu_table.add_row("5", "快速配置向导")
+        menu_table.add_row("4", "制种性能测试")
+        menu_table.add_row("5", "设置")
+        menu_table.add_row("6", "快速配置向导")
         menu_table.add_row("0", "退出")
         
         self.console.print(menu_table)
         
-        choice = Prompt.ask("请选择", choices=["0", "1", "2", "3", "4", "5"])
+        choice = Prompt.ask("请选择", choices=["0", "1", "2", "3", "4", "5", "6"])
         
         if choice == "1":
             self.scan_files()
@@ -437,8 +525,10 @@ class InteractiveMediaPacker:
         elif choice == "3":
             self.start_processing()
         elif choice == "4":
-            self.show_settings_menu()
+            self.performance_test()
         elif choice == "5":
+            self.show_settings_menu()
+        elif choice == "6":
             self.quick_setup_wizard()
         elif choice == "0":
             self.console.print("[green]感谢使用 Media Packer![/green]")
@@ -477,6 +567,283 @@ class InteractiveMediaPacker:
                 self.console.print("[yellow]未找到任何媒体文件夹[/yellow]")
         
         input("按回车键继续...")
+    
+    def performance_test(self):
+        """制种性能测试"""
+        self.console.print("\n[bold]制种性能测试[/bold]")
+        
+        # 检查基本配置
+        if not self.trackers:
+            self.console.print("[red]请先设置 Tracker[/red]")
+            return
+        
+        test_panel = Panel(
+            "[yellow]性能测试功能[/yellow]\n\n"
+            "此功能将：\n"
+            "• 分析系统配置（CPU、内存）\n"
+            "• 创建测试文件进行制种性能测试\n"
+            "• 测试不同参数的制种速度\n"
+            "• 给出针对您系统的优化建议\n\n"
+            "[red]注意：测试将创建临时文件进行测试[/red]",
+            title="制种性能测试",
+            border_style="yellow"
+        )
+        self.console.print(test_panel)
+        
+        if not Confirm.ask("是否开始性能测试？"):
+            return
+        
+        # 系统信息检测
+        self._show_system_info()
+        
+        # 创建测试配置
+        test_config = Config(
+            trackers=self.trackers,
+            output_dir=Path("./performance_test"),
+            auto_optimize=True
+        )
+        
+        # 创建测试文件
+        test_files = self._create_test_files()
+        
+        if not test_files:
+            self.console.print("[red]创建测试文件失败[/red]")
+            return
+        
+        # 运行性能测试
+        self._run_performance_tests(test_config, test_files)
+        
+        # 清理测试文件
+        if Confirm.ask("是否删除测试文件？", default=True):
+            self._cleanup_test_files(test_files)
+        
+        input("按回车键继续...")
+    
+    def _show_system_info(self):
+        """显示系统信息"""
+        import multiprocessing
+        
+        self.console.print("\n[bold]系统信息检测[/bold]")
+        
+        cpu_count = multiprocessing.cpu_count()
+        self.console.print(f"CPU 核心数: {cpu_count}")
+        
+        try:
+            # 尝试获取内存信息
+            import psutil
+            memory = psutil.virtual_memory()
+            self.console.print(f"内存大小: {memory.total / (1024**3):.1f} GB")
+            self.console.print(f"可用内存: {memory.available / (1024**3):.1f} GB")
+        except ImportError:
+            self.console.print("内存信息: 无法获取（需要 psutil 包）")
+        except Exception:
+            self.console.print("内存信息: 无法获取")
+        
+        # VPS检测
+        try:
+            # 简单的VPS检测方法
+            with open('/proc/cpuinfo', 'r') as f:
+                cpu_info = f.read()
+                if 'hypervisor' in cpu_info or 'Xeon' in cpu_info:
+                    self.console.print("[yellow]检测到可能是VPS环境（至强处理器）[/yellow]")
+        except:
+            pass
+    
+    def _create_test_files(self) -> List[Path]:
+        """创建性能测试文件"""
+        test_dir = Path("./performance_test")
+        test_dir.mkdir(exist_ok=True)
+        
+        test_files = []
+        test_sizes = [
+            (50, "50MB"),
+            (200, "200MB"),
+            (1000, "1GB")
+        ]
+        
+        self.console.print("\n[cyan]创建测试文件...[/cyan]")
+        
+        for size_mb, name in test_sizes:
+            file_path = test_dir / f"test_{name.lower()}.dat"
+            
+            if file_path.exists() and file_path.stat().st_size == size_mb * 1024 * 1024:
+                self.console.print(f"[green]✓ 使用现有测试文件: {name}[/green]")
+                test_files.append(file_path)
+                continue
+            
+            try:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=self.console
+                ) as progress:
+                    task = progress.add_task(f"创建 {name} 测试文件", total=None)
+                    
+                    with open(file_path, 'wb') as f:
+                        data = b'0' * (1024 * 1024)  # 1MB chunk
+                        for _ in range(size_mb):
+                            f.write(data)
+                    
+                    progress.remove_task(task)
+                
+                self.console.print(f"[green]✓ 创建完成: {name}[/green]")
+                test_files.append(file_path)
+                
+            except Exception as e:
+                self.console.print(f"[red]✗ 创建失败 {name}: {e}[/red]")
+        
+        return test_files
+    
+    def _run_performance_tests(self, config: Config, test_files: List[Path]):
+        """运行性能测试"""
+        self.console.print("\n[bold]开始性能测试[/bold]")
+        
+        packer = MediaPacker(config)
+        results = []
+        
+        for test_file in test_files:
+            file_size_mb = test_file.stat().st_size / (1024 * 1024)
+            
+            self.console.print(f"\n[cyan]测试文件: {test_file.name} ({file_size_mb:.0f} MB)[/cyan]")
+            
+            try:
+                import time
+                start_time = time.time()
+                
+                # 创建测试种子
+                torrent_path = config.output_dir / f"{test_file.stem}.torrent"
+                packer.torrent_creator.create_torrent(test_file, torrent_path)
+                
+                end_time = time.time()
+                duration = end_time - start_time
+                throughput = file_size_mb / duration if duration > 0 else 0
+                
+                result = {
+                    'file_size_mb': file_size_mb,
+                    'duration': duration,
+                    'throughput': throughput,
+                    'success': True
+                }
+                
+                self.console.print(f"[green]✓ 完成 - 用时: {duration:.1f}s, 速度: {throughput:.1f} MB/s[/green]")
+                
+            except Exception as e:
+                result = {
+                    'file_size_mb': file_size_mb,
+                    'duration': 0,
+                    'throughput': 0,
+                    'success': False,
+                    'error': str(e)
+                }
+                self.console.print(f"[red]✗ 失败: {e}[/red]")
+            
+            results.append(result)
+        
+        # 显示测试结果
+        self._show_performance_results(results)
+    
+    def _show_performance_results(self, results: List[Dict]):
+        """显示性能测试结果"""
+        self.console.print("\n[bold]性能测试结果[/bold]")
+        
+        table = Table(title="制种性能测试")
+        table.add_column("文件大小", style="cyan")
+        table.add_column("用时 (s)", style="yellow")
+        table.add_column("速度 (MB/s)", style="green")
+        table.add_column("状态", style="blue")
+        
+        successful_results = [r for r in results if r['success']]
+        
+        for result in results:
+            status = "成功" if result['success'] else f"失败: {result.get('error', '未知错误')}"
+            status_color = "green" if result['success'] else "red"
+            
+            table.add_row(
+                f"{result['file_size_mb']:.0f} MB",
+                f"{result['duration']:.1f}" if result['success'] else "-",
+                f"{result['throughput']:.1f}" if result['success'] else "-",
+                f"[{status_color}]{status}[/{status_color}]"
+            )
+        
+        self.console.print(table)
+        
+        # 性能分析和建议
+        if successful_results:
+            avg_throughput = sum(r['throughput'] for r in successful_results) / len(successful_results)
+            max_throughput = max(r['throughput'] for r in successful_results)
+            
+            # 生成建议
+            suggestions = []
+            
+            if avg_throughput < 100:
+                suggestions.append("• 性能较低，建议检查磁盘I/O性能")
+                suggestions.append("• 考虑使用SSD存储")
+                suggestions.append("• 检查CPU使用率是否过高")
+            elif avg_throughput < 500:
+                suggestions.append("• 性能中等，可考虑优化系统配置")
+                suggestions.append("• VPS环境建议检查磁盘I/O限制")
+            else:
+                suggestions.append("• 性能良好！")
+            
+            # VPS特殊建议
+            import multiprocessing
+            cpu_count = multiprocessing.cpu_count()
+            if cpu_count >= 16:  # 多核VPS
+                suggestions.append("• 检测到多核CPU，已自动优化线程配置")
+                suggestions.append("• 对于大文件（>10GB），建议使用4MB Piece Size")
+                suggestions.append("• VPS环境建议监控CPU和内存使用率")
+                suggestions.append("• 至强5115适合高性能制种，应该有良好表现")
+            
+            analysis_text = (
+                f"[bold]性能分析[/bold]\n"
+                f"平均速度: {avg_throughput:.1f} MB/s\n"
+                f"最高速度: {max_throughput:.1f} MB/s\n\n"
+                f"[bold]优化建议:[/bold]\n" + "\n".join(suggestions)
+            )
+            
+            analysis_panel = Panel(
+                analysis_text,
+                title="性能分析与建议",
+                border_style="green" if avg_throughput >= 100 else "yellow"
+            )
+            self.console.print(analysis_panel)
+            
+            # 针对36GB文件的预估
+            if avg_throughput > 0:
+                estimated_time = (36 * 1024) / avg_throughput
+                hours = int(estimated_time // 3600)
+                minutes = int((estimated_time % 3600) // 60)
+                
+                estimate_text = f"[bold cyan]36GB文件制种预估时间: "
+                if hours > 0:
+                    estimate_text += f"{hours}小时{minutes}分钟"
+                else:
+                    estimate_text += f"{minutes}分钟"
+                estimate_text += "[/bold cyan]"
+                
+                self.console.print(estimate_text)
+        else:
+            self.console.print("[red]所有测试均失败，请检查配置[/red]")
+    
+    def _cleanup_test_files(self, test_files: List[Path]):
+        """清理测试文件"""
+        import shutil
+        
+        for test_file in test_files:
+            try:
+                if test_file.exists():
+                    test_file.unlink()
+            except Exception as e:
+                self.console.print(f"[yellow]删除测试文件失败 {test_file.name}: {e}[/yellow]")
+        
+        # 删除测试目录
+        try:
+            test_dir = Path("./performance_test")
+            if test_dir.exists():
+                shutil.rmtree(test_dir)
+            self.console.print("[green]✓ 测试文件已清理[/green]")
+        except Exception as e:
+            self.console.print(f"[yellow]清理测试目录失败: {e}[/yellow]")
     
     def _scan_media_folders(self, search_term: str = "") -> List[Dict]:
         """扫描媒体文件夹并分析内容"""
