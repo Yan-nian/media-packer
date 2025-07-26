@@ -125,11 +125,44 @@ media-packer batch /data/movies/* --organize
 echo "0 * * * * /usr/local/bin/media-packer batch /data/new/* --name 'Auto_$(date +\%Y\%m\%d_\%H)'" | crontab -
 ```
 
-## 🛠️ 故障排除
+## 🛠️ 常见问题解决
 
-### 常见问题解决
+### 1. 覆盖安装问题
 
-1. **externally-managed-environment 错误**
+**问题现象：**
+```
+发现现有安装:
+  位置: /root/media-packer
+  当前版本: 旧版本
+  新版本: 2.1.0
+```
+
+**解决方案：**
+
+#### 方法1：使用强制安装参数（推荐）
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --force
+```
+
+#### 方法2：使用更新模式（保留配置）
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --update
+```
+
+#### 方法3：手动删除旧版本
+```bash
+rm -rf /root/media-packer
+curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash
+```
+
+### 2. 管道模式自动处理
+
+**v2.1.0 新特性：**
+脚本会自动检测运行模式：
+- **交互模式**：会询问用户确认是否覆盖
+- **管道模式**：自动继续安装，给出3秒取消时间
+
+### 3. externally-managed-environment 错误
    ```bash
    # 脚本会自动处理，使用 --break-system-packages 参数
    ```

@@ -55,6 +55,10 @@ show_help() {
     echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash"
     echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --path /opt/media-packer"
     echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --full --quiet"
+    echo ""
+    echo "覆盖安装:"
+    echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --force"
+    echo "  curl -fsSL https://raw.githubusercontent.com/Yan-nian/media-packer/main/quick-install.sh | bash -s -- --update"
 }
 
 # 打印带颜色的信息
@@ -235,11 +239,21 @@ check_existing_installation() {
             echo "  当前版本: $OLD_VERSION"
             echo "  新版本: $SCRIPT_VERSION"
             echo ""
-            read -p "是否继续安装？(y/N): " -n 1 -r
-            echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                print_info "安装已取消"
-                exit 0
+            
+            # 检测是否在管道模式下运行
+            if [ -t 0 ]; then
+                # 交互模式 - 可以接收用户输入
+                read -p "是否继续安装？(y/N): " -n 1 -r
+                echo ""
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    print_info "安装已取消"
+                    exit 0
+                fi
+            else
+                # 管道模式 - 自动继续安装
+                print_warning "检测到管道模式，将自动覆盖安装"
+                print_info "如需取消，请使用 Ctrl+C"
+                sleep 3
             fi
         fi
         
