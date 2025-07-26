@@ -210,18 +210,18 @@ class TorrentCreator:
         if not self.config.auto_optimize:
             return self.config.piece_size if self.config.piece_size else 0
         
-        # VPS极致优化的Piece Size配置 - 更大piece减少计算量
-        if total_size < 100 * 1024 * 1024:  # < 100MB
-            return 512 * 1024  # 512KB - 小文件
-        elif total_size < 1 * 1024 * 1024 * 1024:  # < 1GB
-            return 4 * 1024 * 1024  # 4MB - 1GB以下直接用4MB
-        elif total_size < 8 * 1024 * 1024 * 1024:  # < 8GB
-            return 8 * 1024 * 1024  # 8MB - VPS环境8GB以下最优
-        elif total_size < 32 * 1024 * 1024 * 1024:  # < 32GB  
-            return 16 * 1024 * 1024  # 16MB - 大文件
-        elif total_size < 128 * 1024 * 1024 * 1024:  # < 128GB
-            return 32 * 1024 * 1024  # 32MB - 超大文件极速模式
-        else:  # >= 128GB
+        # VPS I/O优化的Piece Size配置 - 优先减少I/O次数
+        if total_size < 200 * 1024 * 1024:  # < 200MB
+            return 1024 * 1024  # 1MB - 小文件
+        elif total_size < 2 * 1024 * 1024 * 1024:  # < 2GB
+            return 8 * 1024 * 1024  # 8MB - 2GB以下直接用8MB
+        elif total_size < 10 * 1024 * 1024 * 1024:  # < 10GB
+            return 16 * 1024 * 1024  # 16MB - VPS环境10GB以下最优
+        elif total_size < 50 * 1024 * 1024 * 1024:  # < 50GB  
+            return 32 * 1024 * 1024  # 32MB - 大文件，减少I/O
+        elif total_size < 200 * 1024 * 1024 * 1024:  # < 200GB
+            return 64 * 1024 * 1024  # 64MB - 超大文件I/O优化
+        else:  # >= 200GB
             return 8 * 1024 * 1024  # 8MB - 巨大文件
     
     def _get_optimal_workers(self) -> int:
@@ -408,21 +408,22 @@ class TorrentCreator:
                                 speed = (pieces_done / elapsed) if elapsed > 0 else 0
                                 progress.update(task, description=f"[cyan]制种进度 ({optimal_workers} 线程) - {speed:.1f} pieces/s")
                 
-                # 使用正确的torf多线程参数 - 极致性能优化
+                # VPS I/O优化：优先使用无回调模式获得最佳性能
                 try:
-                    # VPS环境极致优化：更少回调，更大间隔
-                    torrent.generate(
-                        callback=progress_callback, 
-                        interval=2.0,  # 每2秒回调一次，减少I/O
-                        threads=optimal_workers  # 使用优化后的线程数
-                    )
-                except TypeError:
-                    # 降级到无回调的多线程模式（最快）
+                    # 首先尝试无回调模式（最快，减少I/O干扰）
+                    console.print(f"[green]🚀 使用极速模式（无进度回调）以获得最佳I/O性能[/green]")
+                    torrent.generate(threads=optimal_workers)
+                    progress.update(task, completed=100)
+                except Exception as e:
+                    # 如果无回调模式失败，降级到有回调模式
                     try:
-                        console.print(f"[yellow]使用无回调模式以获得最佳性能[/yellow]")
-                        torrent.generate(threads=optimal_workers)
-                        progress.update(task, completed=100)
-                    except TypeError:
+                        console.print(f"[yellow]降级到回调模式[/yellow]")
+                        torrent.generate(
+                            callback=progress_callback, 
+                            interval=3.0,  # 更长间隔减少I/O
+                            threads=optimal_workers
+                        )
+                    except Exception as e2:
                         # 最后降级到单线程模式
                         progress.update(task, description="[cyan]正在生成种子文件（单线程模式）...")
                         torrent.generate()
