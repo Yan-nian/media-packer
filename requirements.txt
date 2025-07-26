@@ -1,11 +1,17 @@
+# Media Packer Dependencies
+
+# 核心依赖 (简化版和完整版都需要)
 torf>=4.0.0
-requests>=2.25.0
 click>=8.0.0
-pydantic>=1.8.0
+rich>=13.0.0
+
+# 完整版额外依赖 (仅完整版需要)
+# 如果只使用简化版，下面的依赖可选
+requests>=2.25.0
 tmdbv3api>=1.7.0
 pymediainfo>=5.0.0
-colorama>=0.4.4
-rich>=10.0.0
-tkinter
-pillow>=8.0.0
+
+# 可选依赖
+colorama>=0.4.4  # Windows色彩支持
+pillow>=8.0.0    # 图像处理（如果需要）
 watchdog>=2.0.0

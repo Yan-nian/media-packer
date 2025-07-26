@@ -18,6 +18,16 @@ lib/
 lib64/
 parts/
 sdist/
+
+# Media Packer specific
+output/
+temp/
+*.torrent
+*.log
+
+# Backup files
+*_OLD.*
+*_BACKUP.*
 var/
 wheels/
 pip-wheel-metadata/
