@@ -35,24 +35,70 @@
 
 ## 🚀 快速开始
 
-### 依赖安装
+### 🎯 一键启动（最简单）
 
+我们提供了多种启动方式，选择最适合你的：
+
+#### 方式1: 智能启动器
 ```bash
-pip install torf click rich
+# 自动选择版本并安装依赖
+python3 start.py
+```
+
+#### 方式2: Shell脚本（推荐Linux/macOS用户）
+```bash
+# 一键安装和启动
+./setup.sh
+```
+
+#### 方式3: 直接运行（自动安装依赖）
+```bash
+# 简化版 - 自动检查和安装依赖
+python3 media_packer_simple.py
+
+# 完整版 - 自动检查和安装依赖
+python3 media_packer_all_in_one.py
+```
+
+### 🔧 依赖管理
+
+#### 自动依赖安装
+程序首次运行时会自动：
+- ✅ 检查所需依赖包
+- ✅ 提示安装缺失的包  
+- ✅ 一键下载和安装
+- ✅ 自动重启程序
+
+#### 手动依赖管理
+```bash
+# 使用专用的依赖安装工具
+python3 install_deps.py --mode simple    # 安装简化版依赖
+python3 install_deps.py --mode full      # 安装完整版依赖
+python3 install_deps.py --force          # 强制重新安装
+
+# 传统手动安装
+pip install torf click rich              # 简化版
+pip install torf pymediainfo tmdbv3api requests click rich  # 完整版
 ```
 
 ### 基本使用
 
-#### 简化版（推荐）
+#### 新用户（一键启动）
 ```bash
-# 直接运行简化版，启动交互界面
+# 首次使用 - 自动安装依赖
 python3 media_packer_simple.py
 ```
 
-#### 完整版
+程序会自动：
+- 检查所需依赖包
+- 提示安装缺失的包
+- 一键安装并重启程序
+
+#### 高级用户
 ```bash
-# 运行完整版（包含元数据功能）
-python3 media_packer_all_in_one.py
+# 手动安装依赖后使用
+pip install torf click rich
+python3 media_packer_simple.py
 ```
 
 首次使用会显示欢迎界面，选择"快速配置向导"完成基本设置：

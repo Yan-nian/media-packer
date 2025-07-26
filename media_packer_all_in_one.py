@@ -10,10 +10,81 @@ import json
 import shutil
 import logging
 import time
+import subprocess
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
+
+# 依赖检查和自动安装
+def check_and_install_dependencies():
+    """检查并自动安装依赖"""
+    required_packages = {
+        'torf': 'torf>=4.0.0',
+        'pymediainfo': 'pymediainfo>=5.0.0', 
+        'tmdbv3api': 'tmdbv3api>=1.8.0',
+        'requests': 'requests>=2.28.0',
+        'click': 'click>=8.0.0',
+        'rich': 'rich>=13.0.0'
+    }
+    
+    missing_packages = []
+    
+    # 检查依赖
+    for package_name, package_spec in required_packages.items():
+        try:
+            __import__(package_name)
+            print(f"✓ {package_name} 已安装")
+        except ImportError:
+            missing_packages.append(package_spec)
+            print(f"✗ {package_name} 未安装")
+    
+    # 如果有缺失的包，询问是否自动安装
+    if missing_packages:
+        print(f"\n发现 {len(missing_packages)} 个缺失的依赖包:")
+        for pkg in missing_packages:
+            print(f"  - {pkg}")
+        
+        # 在非交互环境中自动安装
+        if not sys.stdin.isatty():
+            install_choice = 'y'
+        else:
+            install_choice = input("\n是否自动安装缺失的依赖? (y/n): ").lower().strip()
+        
+        if install_choice in ['y', 'yes', '']:
+            print("\n正在安装依赖...")
+            try:
+                for package_spec in missing_packages:
+                    print(f"安装 {package_spec}...")
+                    result = subprocess.run([
+                        sys.executable, '-m', 'pip', 'install', package_spec
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"✓ {package_spec} 安装成功")
+                    else:
+                        print(f"✗ {package_spec} 安装失败: {result.stderr}")
+                        return False
+                
+                print("\n所有依赖安装完成！正在重新启动程序...")
+                # 重新启动脚本
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+            except Exception as e:
+                print(f"安装依赖时出错: {e}")
+                print("请手动安装依赖: pip install torf pymediainfo tmdbv3api requests click rich")
+                return False
+        else:
+            print("请手动安装依赖后再运行:")
+            print("pip install torf pymediainfo tmdbv3api requests click rich")
+            return False
+    
+    return True
+
+# 检查并安装依赖
+if not check_and_install_dependencies():
+    sys.exit(1)
 
 # 核心依赖
 try:

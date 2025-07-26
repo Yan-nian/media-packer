@@ -8,23 +8,85 @@ import os
 import sys
 import time
 import logging
+import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+
+# 依赖检查和自动安装
+def check_and_install_dependencies():
+    """检查并自动安装依赖"""
+    required_packages = {
+        'torf': 'torf>=4.0.0',
+        'click': 'click>=8.0.0',
+        'rich': 'rich>=13.0.0'
+    }
+    
+    missing_packages = []
+    
+    # 检查依赖
+    for package_name, package_spec in required_packages.items():
+        try:
+            __import__(package_name)
+            print(f"✓ {package_name} 已安装")
+        except ImportError:
+            missing_packages.append(package_spec)
+            print(f"✗ {package_name} 未安装")
+    
+    # 如果有缺失的包，询问是否自动安装
+    if missing_packages:
+        print(f"\n发现 {len(missing_packages)} 个缺失的依赖包:")
+        for pkg in missing_packages:
+            print(f"  - {pkg}")
+        
+        # 在非交互环境中自动安装
+        if not sys.stdin.isatty():
+            install_choice = 'y'
+        else:
+            install_choice = input("\n是否自动安装缺失的依赖? (y/n): ").lower().strip()
+        
+        if install_choice in ['y', 'yes', '']:
+            print("\n正在安装依赖...")
+            try:
+                for package_spec in missing_packages:
+                    print(f"安装 {package_spec}...")
+                    result = subprocess.run([
+                        sys.executable, '-m', 'pip', 'install', package_spec
+                    ], capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"✓ {package_spec} 安装成功")
+                    else:
+                        print(f"✗ {package_spec} 安装失败: {result.stderr}")
+                        return False
+                
+                print("\n所有依赖安装完成！正在重新启动程序...")
+                # 重新启动脚本
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+            except Exception as e:
+                print(f"安装依赖时出错: {e}")
+                print("请手动安装依赖: pip install torf click rich")
+                return False
+        else:
+            print("请手动安装依赖后再运行:")
+            print("pip install torf click rich")
+            return False
+    
+    return True
+
+# 检查并安装依赖
+if not check_and_install_dependencies():
+    sys.exit(1)
+
+# 现在可以安全地导入依赖
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.progress import track, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt, Confirm
 import click
-
-# 检查依赖
-try:
-    import torf
-except ImportError:
-    print("错误: 缺少 torf 库")
-    print("请安装依赖: pip install torf click rich")
-    sys.exit(1)
+import torf
 
 # 设置控制台
 console = Console()
